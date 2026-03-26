@@ -174,9 +174,10 @@ public class Compilacion {
         if (c == 'x') return "x";
         if (c >= 'y' && c <= 'z') return "[y-z]";
 
-        if (c == ',') return "coma"; 
-
-        String simbolos = "+-*/%=<>!&|^~?.;:{}[]()\"'_@#$¿¡";
+        if (c == ',') return "coma";  
+        if (c == '\"') return "comillas";
+        
+        String simbolos = "+-*/%=<>!&|^~?.;:{}[]()'_@#$¿¡";
         if (simbolos.indexOf(c) != -1) {
             return String.valueOf(c);
         }
