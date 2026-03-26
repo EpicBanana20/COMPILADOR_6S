@@ -1,10 +1,22 @@
 import javax.swing.table.DefaultTableModel;
 import java.util.Map;
+import java.util.Set; // <-- Importación necesaria para las palabras reservadas
 
 public class Compilacion {
 
     private CompiladorGUI gui;
     private LecturaMatriz lectorMatriz;
+
+    // 1. DICCIONARIO DE PALABRAS RESERVADAS
+    // Usamos un Set porque es extremadamente rápido para buscar palabras
+    private static final Set<String> PALABRAS_RESERVADAS = Set.of(
+        "if", "else", "switch", "for", "do", "while", "console.log", "forEach", "break", 
+        "continue", "let", "const", "undefined", "interface", "typeof", "any", "set", 
+        "get", "class", "toLowerCase", "toUpperCase", "length", "trim", "charAt", 
+        "startsWith", "endsWith", "indexOf", "Includes", "slice", "replace", "split", 
+        "push", "shift", "in", "of", "splice", "concat", "find", "findIndex", "filter", 
+        "map", "sort", "reverse"
+    );
 
     public Compilacion(CompiladorGUI gui, LecturaMatriz lectorMatriz) {
         this.gui = gui;
@@ -21,7 +33,8 @@ public class Compilacion {
         String codigoFuente = gui.getEditorCodigo().getText();
         Map<String, Map<String, String>> matriz = lectorMatriz.getMatriz();
 
-        if (codigoFuente.isEmpty()) return;
+        if (codigoFuente.isEmpty())
+            return;
         if (matriz == null || matriz.isEmpty()) {
             System.err.println("❌ Error: La matriz no está cargada.");
             return;
@@ -33,19 +46,17 @@ public class Compilacion {
         int lineaActual = 1;
 
         // Añadimos un espacio final al código para obligar al autómata a procesar el último token
-        codigoFuente += " "; 
+        codigoFuente += " ";
 
-        // 4. EL CICLO PRINCIPAL (El corazón de tu compilador)
+        // 4. EL CICLO PRINCIPAL
         for (int i = 0; i < codigoFuente.length(); i++) {
             char c = codigoFuente.charAt(i);
 
-            // Contamos las líneas para saber dónde ocurren los errores/tokens
-            if (c == '\n') lineaActual++;
+            if (c == '\n')
+                lineaActual++;
 
-            // Clasificamos el carácter para saber qué columna de la matriz buscar
             String columna = clasificarCaracter(c);
 
-            // Buscamos a qué estado debemos saltar
             Map<String, String> filaEstado = matriz.get(estadoActual);
             if (filaEstado == null) {
                 registrarError("Error Crítico", "Estado inexistente [" + estadoActual + "]", lexemaActual.toString(), lineaActual);
@@ -54,23 +65,38 @@ public class Compilacion {
 
             String siguienteEstado = filaEstado.get(columna);
 
-            // MANEJO DE ERRORES: Si la celda está vacía en tu CSV
+            // 🛠️ SOLUCIÓN AL NULLPOINTEREXCEPTION: Validar si la celda es null o está vacía
             if (siguienteEstado == null || siguienteEstado.trim().isEmpty()) {
-                // Solo registramos error si estábamos armando una palabra
-                if (lexemaActual.length() > 0) {
-                    registrarError("ERR_LEX", "Transición vacía desde q" + estadoActual + " con '" + c + "'", lexemaActual.toString() + c, lineaActual);
-                } else if (c != ' ' && c != '\n' && c != '\t' && c != '\r') {
-                    // Si el carácter en sí mismo es ilegal y no estábamos en ninguna palabra
-                    registrarError("ERR_LEX", "Carácter no válido", String.valueOf(c), lineaActual);
-                }
-                
-                // Reiniciamos la máquina para intentar seguir leyendo lo que queda del texto
+                registrarError("Error Léxico", "Transición no definida para '" + c + "'", lexemaActual.toString() + c, lineaActual);
                 estadoActual = "0";
                 lexemaActual.setLength(0);
+                continue; // Saltamos al siguiente carácter para no quedarnos atrapados
+            }
+
+            // MANEJO DE ACEPTACIÓN POR DELIMITADOR (Estado negativo alcanzado)
+            if (siguienteEstado.startsWith("-")) {
+                String tokenEncontrado = siguienteEstado;
+                String palabraFormada = lexemaActual.toString().trim();
+                String familia = obtenerAgrupacion(tokenEncontrado);
+
+                // 🧠 MAGIA: Filtro de Palabras Reservadas
+                if (familia.equals("Identificador") && PALABRAS_RESERVADAS.contains(palabraFormada)) {
+                    familia = "Palabra Reservada";
+                }
+
+                gui.getModeloTokens().addRow(new Object[] { tokenEncontrado, palabraFormada, lineaActual });
+                gui.getModeloPila().addRow(new Object[] { familia, palabraFormada });
+                
+                estadoActual = "0";
+                lexemaActual.setLength(0);
+                
+                i--;
+                if (c == '\n')
+                    lineaActual--;
+
                 continue;
             }
 
-            // Si llegamos aquí, la transición es válida.
             // Si no estamos simplemente dando vueltas en q0 con espacios, guardamos la letra
             if (!(estadoActual.equals("0") && estadoActual.equals(siguienteEstado))) {
                 lexemaActual.append(c);
@@ -78,38 +104,34 @@ public class Compilacion {
 
             estadoActual = siguienteEstado;
 
-            // MANEJO DE ACEPTACIÓN: ¿Llegamos a un estado final (número negativo)?
+            // MANEJO DE ACEPTACIÓN DIRECTA (Llegamos a un estado final)
             if (estadoActual.startsWith("-")) {
                 String tokenEncontrado = estadoActual;
                 String palabraFormada = lexemaActual.toString().trim();
-
-                // 1. Lo mandamos a la tabla de Tokens
-                gui.getModeloTokens().addRow(new Object[]{tokenEncontrado, palabraFormada, lineaActual});
-                
-                // 2. Lo mandamos a la tabla de la Pila Secuencial
                 String familia = obtenerAgrupacion(tokenEncontrado);
-                gui.getModeloPila().addRow(new Object[]{familia, palabraFormada});
 
-                // 3. Reiniciamos la máquina para buscar la siguiente palabra
+                // 🧠 MAGIA: Filtro de Palabras Reservadas (Segunda validación)
+                if (familia.equals("Identificador") && PALABRAS_RESERVADAS.contains(palabraFormada)) {
+                    familia = "Palabra Reservada";
+                }
+
+                gui.getModeloTokens().addRow(new Object[] { tokenEncontrado, palabraFormada, lineaActual });
+                gui.getModeloPila().addRow(new Object[] { familia, palabraFormada });
+
                 estadoActual = "0";
                 lexemaActual.setLength(0);
-                
-                // TRUCO IMPORTANTE: Si el autómata aceptó porque leyó un separador (ej. espacio o salto),
-                // tenemos que retroceder el lector un paso para no "comernos" ese separador.
-                // *Nota: Esto depende de cómo diseñaste tu autómata. Si tus estados finales se alcanzan 
-                // CON el delimitador, descontamos i.
-                i--; 
-                if (c == '\n') lineaActual--; // Ajustamos la línea si retrocedimos un salto
+
+                i--;
+                if (c == '\n')
+                    lineaActual--; 
             }
         }
     }
 
     private void registrarError(String tokenError, String descripcion, String lexema, int linea) {
-        gui.getModeloErrores().addRow(new Object[]{tokenError, descripcion, lexema, "Léxico", String.valueOf(linea)});
+        gui.getModeloErrores().addRow(new Object[] { tokenError, descripcion, lexema, "Léxico", String.valueOf(linea) });
     }
 
-    // --- EL DICCIONARIO DE FAMILIAS ---
-    // AQUI TENDRÁS QUE CAMBIAR ESTOS NÚMEROS POR LOS TUYOS REALES LUEGO
     private String obtenerAgrupacion(String estadoFinal) {
         switch (estadoFinal) {
             case "-70": return "Identificador";
@@ -121,7 +143,6 @@ public class Compilacion {
         }
     }
 
-    // --- EL CLASIFICADOR DE CARACTERES (El que hicimos al principio) ---
     private String clasificarCaracter(char c) {
         if (c == ' ') return "espacio";
         if (c == '\n') return "\\n";
@@ -143,7 +164,7 @@ public class Compilacion {
 
         if ((c >= 'G' && c <= 'K') || (c >= 'g' && c <= 'k')) return "[G-Kg-k]";
         if (c == 'l' || c == 'L') return "[lL]";
-        if (c == 'M' || c == 'N' || c == 'Ñ' || c == 'm' || c == 'n' || c == 'ñ') return "[M-Ñm-ñ]";
+        if (c == 'M' || c == 'N' || c == 'Ñ' || c == 'm' || c == 'n' || c == 'ñ') return "[M-Nm-n]";
         if (c == 'O') return "O";
         if (c >= 'P' && c <= 'W') return "[P-W]";
         if (c == 'X') return "X";
@@ -153,9 +174,8 @@ public class Compilacion {
         if (c == 'x') return "x";
         if (c >= 'y' && c <= 'z') return "[y-z]";
 
-        // Símbolos
-        if (c == ',') return "coma"; // Acuérdate de cambiar esto en tu CSV como te mencioné antes
-        
+        if (c == ',') return "coma"; 
+
         String simbolos = "+-*/%=<>!&|^~?.;:{}[]()\"'_@#$¿¡";
         if (simbolos.indexOf(c) != -1) {
             return String.valueOf(c);
