@@ -11,16 +11,22 @@ public class Main {
         }
 
         SwingUtilities.invokeLater(() -> {
-            // 1. Creamos la interfaz visual
+            // 1. Inicializamos la GUI
             CompiladorGUI ventana = new CompiladorGUI();
             
-            // 2. Creamos la clase lógica y le pasamos la ventana
-            AbrirArchivo logicaAbrir = new AbrirArchivo(ventana);
+            // 2. Cargamos la Matriz
+            LecturaMatriz lectorMatriz = new LecturaMatriz();
+            lectorMatriz.cargarMatriz("C2A6.csv");
             
-            // 3. ¡LA CONEXIÓN! Le decimos al botón de la GUI qué debe hacer al hacer clic
+            // 3. Conectamos "Abrir Archivo"
+            AbrirArchivo logicaAbrir = new AbrirArchivo(ventana);
             ventana.getBtnAbrir().addActionListener(e -> logicaAbrir.ejecutar());
 
-            // 4. Mostramos la ventana
+            // 4. ¡LA NUEVA CONEXIÓN DE COMPILACIÓN!
+            Compilacion logicaCompilar = new Compilacion(ventana, lectorMatriz);
+            ventana.getBtnCompilar().addActionListener(e -> logicaCompilar.ejecutar());
+
+            // 5. Mostramos la ventana
             ventana.setVisible(true);
         });
     }
