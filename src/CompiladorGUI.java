@@ -92,12 +92,12 @@ public class CompiladorGUI extends JFrame {
         modeloErrores = new DefaultTableModel(new String[]{"Token Error", "Descripción", "Lexema", "Tipo", "Linea"}, 0);
         tablaErrores = crearTablaModerna(modeloErrores);
 
-        modeloPila = new DefaultTableModel(new String[]{"Agrupación", "Elemento"}, 0);
+        modeloPila = new DefaultTableModel(new String[]{"Clasificación", "Elemento", "Cantidad"}, 0);
         tablaPila = crearTablaModerna(modeloPila);
 
         JSplitPane splitDerecho = crearSplitPaneOscuro(
             crearPanelTabla("Tabla de Errores", tablaErrores, 250), 
-            crearPanelTabla("Pila de Agrupación", tablaPila, 250)
+            crearPanelTabla("Contadores", tablaPila, 250)
         );
         splitDerecho.setDividerLocation(300);
 

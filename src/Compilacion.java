@@ -1,6 +1,6 @@
-import javax.swing.table.DefaultTableModel;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set; // <-- Importación necesaria para las palabras reservadas
+import java.util.Set;
 
 public class Compilacion {
 
@@ -8,7 +8,6 @@ public class Compilacion {
     private LecturaMatriz lectorMatriz;
 
     // 1. DICCIONARIO DE PALABRAS RESERVADAS
-    // Usamos un Set porque es extremadamente rápido para buscar palabras
     private static final Set<String> PALABRAS_RESERVADAS = Set.of(
         "if", "else", "switch", "for", "do", "while", "console.log", "forEach", "break", 
         "continue", "let", "const", "undefined", "interface", "typeof", "any", "set", 
@@ -40,7 +39,10 @@ public class Compilacion {
             return;
         }
 
-        // 3. Variables para recorrer el texto
+        // 3. Estructura para contar: Map<Clasificación, Map<Elemento, Cantidad>>
+        Map<String, Map<String, Integer>> contadores = new LinkedHashMap<>();
+
+        // 4. Variables para recorrer el texto
         String estadoActual = "0";
         StringBuilder lexemaActual = new StringBuilder();
         int lineaActual = 1;
@@ -48,7 +50,7 @@ public class Compilacion {
         // Añadimos un espacio final al código para obligar al autómata a procesar el último token
         codigoFuente += " ";
 
-        // 4. EL CICLO PRINCIPAL
+        // 5. EL CICLO PRINCIPAL
         for (int i = 0; i < codigoFuente.length(); i++) {
             char c = codigoFuente.charAt(i);
 
@@ -59,18 +61,23 @@ public class Compilacion {
 
             Map<String, String> filaEstado = matriz.get(estadoActual);
             if (filaEstado == null) {
-                registrarError("Error Crítico", "Estado inexistente [" + estadoActual + "]", lexemaActual.toString(), lineaActual);
+                String lexError = lexemaActual.toString();
+                registrarError("Error Crítico", "Estado inexistente [" + estadoActual + "]", lexError, lineaActual);
+                registrarConteo(contadores, "Errores Críticos", lexError);
                 break;
             }
 
             String siguienteEstado = filaEstado.get(columna);
 
-            // 🛠️ SOLUCIÓN AL NULLPOINTEREXCEPTION: Validar si la celda es null o está vacía
+            // Validar si la celda es null o está vacía (Transición no definida)
             if (siguienteEstado == null || siguienteEstado.trim().isEmpty()) {
-                registrarError("Error Léxico", "Transición no definida para '" + c + "'", lexemaActual.toString() + c, lineaActual);
+                String lexError = (lexemaActual.toString() + c).trim();
+                registrarError("Error Léxico", "Transición no definida para '" + c + "'", lexError, lineaActual);
+                registrarConteo(contadores, "Errores Léxicos", lexError);
+                
                 estadoActual = "0";
                 lexemaActual.setLength(0);
-                continue; // Saltamos al siguiente carácter para no quedarnos atrapados
+                continue; // Saltamos al siguiente carácter
             }
 
             // MANEJO DE ACEPTACIÓN POR DELIMITADOR (Estado negativo alcanzado)
@@ -79,13 +86,13 @@ public class Compilacion {
                 String palabraFormada = lexemaActual.toString().trim();
                 String familia = obtenerAgrupacion(tokenEncontrado);
 
-                // 🧠 MAGIA: Filtro de Palabras Reservadas
+                // Filtro de Palabras Reservadas
                 if (familia.equals("Identificador") && PALABRAS_RESERVADAS.contains(palabraFormada)) {
-                    familia = "Palabra Reservada";
+                    familia = "Palabras reservadas";
                 }
 
                 gui.getModeloTokens().addRow(new Object[] { tokenEncontrado, palabraFormada, lineaActual });
-                gui.getModeloPila().addRow(new Object[] { familia, palabraFormada });
+                registrarConteo(contadores, familia, palabraFormada); // Se suma al contador
                 
                 estadoActual = "0";
                 lexemaActual.setLength(0);
@@ -110,13 +117,13 @@ public class Compilacion {
                 String palabraFormada = lexemaActual.toString().trim();
                 String familia = obtenerAgrupacion(tokenEncontrado);
 
-                // 🧠 MAGIA: Filtro de Palabras Reservadas (Segunda validación)
+                // Filtro de Palabras Reservadas
                 if (familia.equals("Identificador") && PALABRAS_RESERVADAS.contains(palabraFormada)) {
-                    familia = "Palabra Reservada";
+                    familia = "Palabras reservadas";
                 }
 
                 gui.getModeloTokens().addRow(new Object[] { tokenEncontrado, palabraFormada, lineaActual });
-                gui.getModeloPila().addRow(new Object[] { familia, palabraFormada });
+                registrarConteo(contadores, familia, palabraFormada); // Se suma al contador
 
                 estadoActual = "0";
                 lexemaActual.setLength(0);
@@ -126,6 +133,25 @@ public class Compilacion {
                     lineaActual--; 
             }
         }
+
+        // 6. VOLCAR CONTADORES A LA TABLA PILA AL FINALIZAR
+        for (Map.Entry<String, Map<String, Integer>> entryClasificacion : contadores.entrySet()) {
+            String clasificacion = entryClasificacion.getKey();
+            for (Map.Entry<String, Integer> entryElemento : entryClasificacion.getValue().entrySet()) {
+                String elemento = entryElemento.getKey();
+                int cantidad = entryElemento.getValue();
+                gui.getModeloPila().addRow(new Object[]{clasificacion, elemento, cantidad});
+            }
+        }
+    }
+
+    // --- MÉTODOS AUXILIARES ---
+
+    private void registrarConteo(Map<String, Map<String, Integer>> contadores, String clasificacion, String elemento) {
+        if (elemento == null || elemento.trim().isEmpty()) return;
+        contadores.putIfAbsent(clasificacion, new LinkedHashMap<>());
+        Map<String, Integer> elementos = contadores.get(clasificacion);
+        elementos.put(elemento, elementos.getOrDefault(elemento, 0) + 1);
     }
 
     private void registrarError(String tokenError, String descripcion, String lexema, int linea) {
@@ -133,15 +159,76 @@ public class Compilacion {
     }
 
     private String obtenerAgrupacion(String estadoFinal) {
-        switch (estadoFinal) {
-            case "-70": return "Identificador";
-            case "-11": return "Comentario Multilínea";
-            case "-14": return "Número Entero";
-            case "-15": return "Número Real";
-            case "-40": return "Operador Aritmético";
-            default: return "Agrupación Desconocida (" + estadoFinal + ")";
-        }
+    switch (estadoFinal) {
+        case "-1": return "Operadores matematicos";
+        case "-2": return "Operadores postfix";
+        case "-3": return "Operadores de asignacion";
+        case "-4": return "Operadores matematicos";
+        case "-5": return "Operadores postfix";
+        case "-6": return "Operadores de asignacion";
+        case "-7": return "Operadores matematicos";
+        case "-8": return "Operador exponente";
+        case "-9": return "Operadores de asignacion";
+        case "-10": return "Operadores matematicos";
+        case "-11": return "Comentario grupal";
+        case "-12": return "Comentario lineal";
+        case "-13": return "Operadores de asignacion";
+        case "-14": return "Operadores matematicos";
+        case "-15": return "Operadores de asignacion";
+        case "-16": return "Operadores de asignacion";
+        case "-17": return "Operadores de asignacion";
+        case "-18": return "Operadores relacionales";
+        case "-19": return "Operadores sin igualdad de conversion de tipo";
+        case "-20": return "Operadores relacionales";
+        case "-21": return "Operadores de turno";
+        case "-22": return "Operadores relacionales";
+        case "-23": return "Operadores relacionales";
+        case "-24": return "Operadores de asignacion";
+        case "-25": return "Operadores relacionales";
+        case "-26": return "Operadores relacionales";
+        case "-27": return "Operadores de turno";
+        case "-28": return "Operadores de asignacion";
+        case "-29": return "Operadores de turno";
+        case "-30": return "Operadores de asignacion";
+        case "-31": return "Operadores logicos";
+        case "-32": return "Operadores relacionales";
+        case "-33": return "Operadores sin igualdad de conversion de tipo";
+        case "-34": return "Operadores logicos binarios";
+        case "-35": return "Operadores de asignacion";
+        case "-36": return "Operadores logicos";
+        case "-37": return "Operadores logicos binarios";
+        case "-38": return "Operadores logicos";
+        case "-39": return "Operadores logicos binarios";
+        case "-40": return "Operadores de asignacion";
+        case "-41": return "Operadores logicos binarios";
+        case "-42": return "Operador ternario";
+        case "-43": case "-44": case "-45": case "-46": 
+            return "Operador de control";
+        case "-47": case "-48": case "-49": case "-50": case "-51": case "-52": 
+            return "Operador de agrupamiento";
+        case "-53": case "-54": 
+            return "Cadena";
+        case "-55": return "Numerica Decimal";
+        case "-56": return "Numerica Real";
+        case "-57": case "-58": 
+            return "Numerica Exponencial";
+        case "-59": return "Numerica Binario";
+        case "-60": return "Numerica Octal";
+        case "-61": return "Numerica Hexadecimal";
+        case "-62": return "Cadena Identificador";
+        case "-63": return "Numerica Binario Identificador";
+        case "-64": return "Numerica Decimal Identificador";
+        case "-65": return "Numerica Octal Identificador";
+        case "-66": return "Numerica Hexadecimal Identificador";
+        case "-67": return "Real Identificador";
+        case "-68": return "Exponencial Identificador";
+        case "-69": return "Booleana Identificador";
+        case "-70": return "Palabras Reservadas";
+
+        default: 
+            return "Agrupación Desconocida (" + estadoFinal + ")";
     }
+}
 
     private String clasificarCaracter(char c) {
         if (c == ' ') return "espacio";
