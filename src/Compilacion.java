@@ -48,7 +48,7 @@ public class Compilacion {
         int lineaActual = 1;
 
         // Añadimos un espacio final al código para obligar al autómata a procesar el último token
-        codigoFuente += " ";
+        codigoFuente += "\0";
 
         // 5. EL CICLO PRINCIPAL
         for (int i = 0; i < codigoFuente.length(); i++) {
@@ -59,7 +59,7 @@ public class Compilacion {
                 lineaActual++;
 
             String columna = clasificarCaracter(c);
-
+            System.out.println(clasificarCaracter(c));
             Map<String, String> filaEstado = matriz.get(estadoActual);
             
             if (filaEstado == null) {
@@ -93,6 +93,26 @@ public class Compilacion {
                 estadoActual = "0";
                 lexemaActual.setLength(0);
                 continue; // Saltamos al siguiente carácter y seguimos buscando tokens
+            }
+
+            if (siguienteEstado.length() >= 3 && (siguienteEstado.startsWith("50") || siguienteEstado.startsWith("51"))) {
+                
+                // Extraemos todo lo que se había guardado del comentario (ej. "/* hola mundo") 
+                // y le quitamos el carácter invisible \0
+                String lexError = (lexemaActual.toString() + c).replace("\0", "").trim();
+                
+                // Ajustamos la línea
+                int lineaRegistro = (c == '\n' || c == '\0') ? lineaActual - 1 : lineaActual;
+                
+                // Obtenemos el texto "Comentario sin cerrar" (usando el método que creamos)
+                String descError = obtenerDescripcionError(siguienteEstado);
+                
+                registrarError("Error Léxico", descError, lexError, lineaRegistro);
+                registrarConteo(contadores, "Errores Léxicos", lexError);
+                
+                estadoActual = "0";
+                lexemaActual.setLength(0);
+                continue; // Reiniciamos y seguimos
             }
 
             // MANEJO DE ACEPTACIÓN POR DELIMITADOR (Estado negativo alcanzado)
@@ -184,6 +204,24 @@ public class Compilacion {
         gui.getModeloErrores().addRow(new Object[] { tokenError, descripcion, lexema, "Léxico", String.valueOf(linea) });
     }
 
+    private String obtenerDescripcionError(String estadoError) {
+        switch (estadoError) {
+            case "500": return "Error 500: Se espera un caracter valido";
+            case "501": return "Error 501: Cadena sin cerrar";
+            case "502": return "Error 502: Flotante incompleto";
+            case "503": return "Error 503: Exponente incompleto";
+            case "504": return "Error 504: Base numerica invalida";
+            case "505": return "Error 505: Binario incompleto";
+            case "506": return "Error 506: Octal incompleto";
+            case "507": return "Error 507: Hexadecimal incompleto";
+            case "508": return "Error 508: Identificador incompleto";
+            case "509": return "Error 509: Se esperaba B,D,O,X";
+            case "510": return "Error 510: Se esperaba un elemento alfabetico";
+            case "511": return "Error 511: Comentario sin cerrar";
+            default: return "Error léxico (" + estadoError + ")";
+        }
+    }
+    
     private String obtenerAgrupacion(String estadoFinal) {
     switch (estadoFinal) {
         case "-1": return "Operadores matematicos";
@@ -257,6 +295,7 @@ public class Compilacion {
 }
 
     private String clasificarCaracter(char c) {
+        if (c == '\0') return "EOF";
         if (c == ' ') return "espacio";
         if (c == '\n') return "\\n";
         if (c == '\t') return "\\t";
