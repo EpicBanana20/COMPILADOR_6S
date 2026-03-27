@@ -1,21 +1,29 @@
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set;
 
 public class Compilacion {
 
     private CompiladorGUI gui;
     private LecturaMatriz lectorMatriz;
 
-    // 1. DICCIONARIO DE PALABRAS RESERVADAS
-    private static final Set<String> PALABRAS_RESERVADAS = Set.of(
-        "if", "else", "switch", "for", "do", "while", "console.log", "forEach", "break", 
-        "continue", "let", "const", "undefined", "interface", "typeof", "any", "set", 
-        "get", "class", "toLowerCase", "toUpperCase", "length", "trim", "charAt", 
-        "startsWith", "endsWith", "indexOf", "Includes", "slice", "replace", "split", 
-        "push", "shift", "in", "of", "splice", "concat", "find", "findIndex", "filter", 
-        "map", "sort", "reverse"
-    );
+    // 1. DICCIONARIO DE PALABRAS RESERVADAS CON SUS TOKENS ASIGNADOS (-71 en adelante)
+    private static final Map<String, String> PALABRAS_RESERVADAS = new LinkedHashMap<>();
+
+    static {
+        String[] palabras = {
+            "if", "else", "switch", "for", "do", "while", "console.log", "forEach", "break", 
+            "continue", "let", "const", "undefined", "interface", "typeof", "any", "set", 
+            "get", "class", "toLowerCase", "toUpperCase", "length", "trim", "charAt", 
+            "startsWith", "endsWith", "indexOf", "Includes", "slice", "replace", "split", 
+            "push", "shift", "in", "of", "splice", "concat", "find", "findIndex", "filter", 
+            "map", "sort", "reverse", "true", "false", "null"
+        };
+        int tokenActual = -71;
+        for (String palabra : palabras) {
+            PALABRAS_RESERVADAS.put(palabra, String.valueOf(tokenActual));
+            tokenActual--;
+        }
+    }
 
     public Compilacion(CompiladorGUI gui, LecturaMatriz lectorMatriz) {
         this.gui = gui;
@@ -84,7 +92,6 @@ public class Compilacion {
             // Validar si la celda es null o está vacía (Transición no definida)
             if (siguienteEstado == null || siguienteEstado.trim().isEmpty()) {
                 String lexError = (lexemaActual.toString() + c).trim();
-                // Si el error salta por un \n, el token roto era de la línea anterior
                 int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
                 
                 registrarError("Error Léxico", "Transición no definida para '" + c + "'", lexError, lineaRegistro);
@@ -92,19 +99,12 @@ public class Compilacion {
                 
                 estadoActual = "0";
                 lexemaActual.setLength(0);
-                continue; // Saltamos al siguiente carácter y seguimos buscando tokens
+                continue; 
             }
 
             if (siguienteEstado.length() >= 3 && (siguienteEstado.startsWith("50") || siguienteEstado.startsWith("51"))) {
-                
-                // Extraemos todo lo que se había guardado del comentario (ej. "/* hola mundo") 
-                // y le quitamos el carácter invisible \0
                 String lexError = (lexemaActual.toString() + c).replace("\0", "").trim();
-                
-                // Ajustamos la línea
                 int lineaRegistro = (c == '\n' || c == '\0') ? lineaActual - 1 : lineaActual;
-                
-                // Obtenemos el texto "Comentario sin cerrar" (usando el método que creamos)
                 String descError = obtenerDescripcionError(siguienteEstado);
                 
                 registrarError("Error Léxico", descError, lexError, lineaRegistro);
@@ -112,72 +112,111 @@ public class Compilacion {
                 
                 estadoActual = "0";
                 lexemaActual.setLength(0);
-                continue; // Reiniciamos y seguimos
+                continue; 
             }
 
+            // ====================================================================
             // MANEJO DE ACEPTACIÓN POR DELIMITADOR (Estado negativo alcanzado)
+            // ====================================================================
             if (siguienteEstado.startsWith("-")) {
                 String tokenEncontrado = siguienteEstado;
                 String palabraFormada = lexemaActual.toString().trim();
                 String familia = obtenerAgrupacion(tokenEncontrado);
 
-                // Filtro de Palabras Reservadas
-                if (familia.equals("Identificador") && PALABRAS_RESERVADAS.contains(palabraFormada)) {
-                    familia = "Palabras reservadas";
+                // RESTRICCIÓN CORREGIDA: Solo aplicamos lógica de diccionario si el autómata arrojó -70
+                if (tokenEncontrado.equals("-70")) {
+                    if (PALABRAS_RESERVADAS.containsKey(palabraFormada)) {
+                        tokenEncontrado = PALABRAS_RESERVADAS.get(palabraFormada); 
+                        
+                        if (palabraFormada.equals("true") || palabraFormada.equals("false")) {
+                            familia = "Constantes Booleanas";
+                        } else if (palabraFormada.equals("null")) {
+                            familia = "Constante nula";
+                        } else {
+                            familia = "Palabras Reservadas";
+                        }
+                    } else {
+                        // ERROR: Llegó como -70 pero no es una palabra válida de nuestra lista
+                        int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
+                        registrarError("Error Léxico", "Palabra reservada no reconocida", palabraFormada, lineaRegistro);
+                        registrarConteo(contadores, "Errores Léxicos", palabraFormada);
+                        
+                        estadoActual = "0";
+                        lexemaActual.setLength(0);
+                        
+                        i--;
+                        if (c == '\n') lineaActual--;
+                        
+                        continue;
+                    }
                 }
 
-                // ==========================================
-                // CORRECCIÓN DE LÍNEA: Si un salto de línea delimitó el token, 
-                // el token pertenece realmente a la línea anterior.
-                // ==========================================
                 int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
 
-                // NUEVO: Solo lo agregamos a los tokens válidos si no es un comentario (-11 o -12)
                 if (!tokenEncontrado.equals("-11") && !tokenEncontrado.equals("-12")) {
                     gui.getModeloTokens().addRow(new Object[] { tokenEncontrado, palabraFormada, lineaRegistro });
                 }
                 
-                registrarConteo(contadores, familia, palabraFormada); // Se suma al contador
+                registrarConteo(contadores, familia, palabraFormada); 
                 
                 estadoActual = "0";
                 lexemaActual.setLength(0);
                 
                 i--;
-                if (c == '\n')
-                    lineaActual--; // Al retroceder, también deshacemos el avance de línea
+                if (c == '\n') lineaActual--; 
 
                 continue;
             }
 
-            // Si no estamos simplemente dando vueltas en q0 con espacios, guardamos la letra
             if (!(estadoActual.equals("0") && estadoActual.equals(siguienteEstado))) {
                 lexemaActual.append(c);
             }
 
             estadoActual = siguienteEstado;
 
+            // ====================================================================
             // MANEJO DE ACEPTACIÓN DIRECTA (Llegamos a un estado final)
+            // ====================================================================
             if (estadoActual.startsWith("-")) {
                 String tokenEncontrado = estadoActual;
                 String palabraFormada = lexemaActual.toString().trim();
                 String familia = obtenerAgrupacion(tokenEncontrado);
 
-                // Filtro de Palabras Reservadas
-                if (familia.equals("Identificador") && PALABRAS_RESERVADAS.contains(palabraFormada)) {
-                    familia = "Palabras reservadas";
+                // RESTRICCIÓN CORREGIDA: Solo aplicamos lógica de diccionario si el autómata arrojó -70
+                if (tokenEncontrado.equals("-70")) {
+                    if (PALABRAS_RESERVADAS.containsKey(palabraFormada)) {
+                        tokenEncontrado = PALABRAS_RESERVADAS.get(palabraFormada);
+                        
+                        if (palabraFormada.equals("true") || palabraFormada.equals("false")) {
+                            familia = "Constantes Booleanas";
+                        } else if (palabraFormada.equals("null")) {
+                            familia = "Constante nula";
+                        } else {
+                            familia = "Palabras Reservadas";
+                        }
+                    } else {
+                        // ERROR: Llegó como -70 pero no es una palabra válida de nuestra lista
+                        int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
+                        registrarError("Error Léxico", "Palabra reservada no reconocida", palabraFormada, lineaRegistro);
+                        registrarConteo(contadores, "Errores Léxicos", palabraFormada);
+                        
+                        estadoActual = "0";
+                        lexemaActual.setLength(0);
+                        
+                        i--;
+                        if (c == '\n') lineaActual--;
+                        
+                        continue;
+                    }
                 }
 
-                // ==========================================
-                // CORRECCIÓN DE LÍNEA
-                // ==========================================
                 int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
 
-                // NUEVO: Solo lo agregamos a los tokens válidos si no es un comentario (-11 o -12)
                 if (!tokenEncontrado.equals("-11") && !tokenEncontrado.equals("-12")) {
                     gui.getModeloTokens().addRow(new Object[] { tokenEncontrado, palabraFormada, lineaRegistro });
                 }
                 
-                registrarConteo(contadores, familia, palabraFormada); // Se suma al contador
+                registrarConteo(contadores, familia, palabraFormada);
 
                 estadoActual = "0";
                 lexemaActual.setLength(0);
