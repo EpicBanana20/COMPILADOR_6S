@@ -54,17 +54,29 @@ public class Compilacion {
         for (int i = 0; i < codigoFuente.length(); i++) {
             char c = codigoFuente.charAt(i);
 
+            // Al leer un salto de línea, pasamos a la siguiente
             if (c == '\n')
                 lineaActual++;
 
             String columna = clasificarCaracter(c);
 
             Map<String, String> filaEstado = matriz.get(estadoActual);
+            
             if (filaEstado == null) {
                 String lexError = lexemaActual.toString();
-                registrarError("Error Crítico", "Estado inexistente [" + estadoActual + "]", lexError, lineaActual);
+                // Si el error salta por un \n, el token roto era de la línea anterior
+                int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
+                
+                registrarError("Error Crítico", "Estado inexistente [" + estadoActual + "]", lexError, lineaRegistro);
                 registrarConteo(contadores, "Errores Críticos", lexError);
-                break;
+                
+                estadoActual = "0";
+                lexemaActual.setLength(0);
+                
+                i--;
+                if (c == '\n') lineaActual--;
+                
+                continue; 
             }
 
             String siguienteEstado = filaEstado.get(columna);
@@ -72,12 +84,15 @@ public class Compilacion {
             // Validar si la celda es null o está vacía (Transición no definida)
             if (siguienteEstado == null || siguienteEstado.trim().isEmpty()) {
                 String lexError = (lexemaActual.toString() + c).trim();
-                registrarError("Error Léxico", "Transición no definida para '" + c + "'", lexError, lineaActual);
+                // Si el error salta por un \n, el token roto era de la línea anterior
+                int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
+                
+                registrarError("Error Léxico", "Transición no definida para '" + c + "'", lexError, lineaRegistro);
                 registrarConteo(contadores, "Errores Léxicos", lexError);
                 
                 estadoActual = "0";
                 lexemaActual.setLength(0);
-                continue; // Saltamos al siguiente carácter
+                continue; // Saltamos al siguiente carácter y seguimos buscando tokens
             }
 
             // MANEJO DE ACEPTACIÓN POR DELIMITADOR (Estado negativo alcanzado)
@@ -91,7 +106,13 @@ public class Compilacion {
                     familia = "Palabras reservadas";
                 }
 
-                gui.getModeloTokens().addRow(new Object[] { tokenEncontrado, palabraFormada, lineaActual });
+                // ==========================================
+                // CORRECCIÓN DE LÍNEA: Si un salto de línea delimitó el token, 
+                // el token pertenece realmente a la línea anterior.
+                // ==========================================
+                int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
+
+                gui.getModeloTokens().addRow(new Object[] { tokenEncontrado, palabraFormada, lineaRegistro });
                 registrarConteo(contadores, familia, palabraFormada); // Se suma al contador
                 
                 estadoActual = "0";
@@ -99,7 +120,7 @@ public class Compilacion {
                 
                 i--;
                 if (c == '\n')
-                    lineaActual--;
+                    lineaActual--; // Al retroceder, también deshacemos el avance de línea
 
                 continue;
             }
@@ -122,7 +143,12 @@ public class Compilacion {
                     familia = "Palabras reservadas";
                 }
 
-                gui.getModeloTokens().addRow(new Object[] { tokenEncontrado, palabraFormada, lineaActual });
+                // ==========================================
+                // CORRECCIÓN DE LÍNEA
+                // ==========================================
+                int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
+
+                gui.getModeloTokens().addRow(new Object[] { tokenEncontrado, palabraFormada, lineaRegistro });
                 registrarConteo(contadores, familia, palabraFormada); // Se suma al contador
 
                 estadoActual = "0";
