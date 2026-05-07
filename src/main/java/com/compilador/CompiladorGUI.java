@@ -1,3 +1,5 @@
+package com.compilador;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
@@ -86,26 +88,39 @@ public class CompiladorGUI extends JFrame {
         panelCentro.add(scrollEditor, BorderLayout.CENTER);
 
         // --- 3. Panel Inferior (Tablas) ---
-        modeloTokens = new DefaultTableModel(new String[]{"Token", "Lexema", "Linea"}, 0);
+        
+        // Tabla Tokens (No editable)
+        modeloTokens = new DefaultTableModel(new String[]{"Token", "Lexema", "Linea"}, 0) {
+            @Override public boolean isCellEditable(int row, int column) { return false; }
+        };
         tablaTokens = crearTablaModerna(modeloTokens);
         
-        modeloErrores = new DefaultTableModel(new String[]{"Token Error", "Descripción", "Lexema", "Tipo", "Linea"}, 0);
+        // Tabla Errores (No editable)
+        modeloErrores = new DefaultTableModel(new String[]{"Token Error", "Descripción", "Lexema", "Tipo", "Linea"}, 0) {
+            @Override public boolean isCellEditable(int row, int column) { return false; }
+        };
         tablaErrores = crearTablaModerna(modeloErrores);
 
-        modeloPila = new DefaultTableModel(new String[]{"Clasificación", "Elemento", "Cantidad"}, 0);
+        // Tabla Pila/Contadores (No editable y SIN columna "Elemento")
+        modeloPila = new DefaultTableModel(new String[]{"Clasificación", "Cantidad"}, 0) {
+            @Override public boolean isCellEditable(int row, int column) { return false; }
+        };
         tablaPila = crearTablaModerna(modeloPila);
 
+        // Ajuste de anchos proporcionales
         JSplitPane splitDerecho = crearSplitPaneOscuro(
-            crearPanelTabla("Tabla de Errores", tablaErrores, 250), 
+            crearPanelTabla("Tabla de Errores", tablaErrores, 350), 
             crearPanelTabla("Contadores", tablaPila, 250)
         );
-        splitDerecho.setDividerLocation(300);
+        splitDerecho.setDividerLocation(480); // Le damos ~40% (480px de 1200px) a Errores
+        splitDerecho.setResizeWeight(0.55);
 
         JSplitPane splitPrincipal = crearSplitPaneOscuro(
             crearPanelTabla("Tokens Correctos", tablaTokens, 300), 
             splitDerecho
         );
-        splitPrincipal.setDividerLocation(350);
+        splitPrincipal.setDividerLocation(350); // Le damos ~30% a Tokens (350px)
+        splitPrincipal.setResizeWeight(0.3);
 
         JPanel panelSur = new JPanel(new BorderLayout());
         panelSur.setBorder(new EmptyBorder(0, 10, 10, 10)); 
@@ -117,11 +132,9 @@ public class CompiladorGUI extends JFrame {
         cp.add(panelNorte, BorderLayout.NORTH);
         cp.add(panelCentro, BorderLayout.CENTER);
         cp.add(panelSur, BorderLayout.SOUTH);
-        
-        // NOTA: Aquí ya no hay Event Listeners (lógica).
     }
 
-    // --- MÉTODOS VISUALES (Se mantienen igual) ---
+    // --- MÉTODOS VISUALES ---
     private JSplitPane crearSplitPaneOscuro(Component izq, Component der) {
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, izq, der);
         split.setContinuousLayout(true);
@@ -232,7 +245,6 @@ public class CompiladorGUI extends JFrame {
         return btn;
     }
 
-    // --- CLASES AUXILIARES VISUALES ---
     public class TextLineNumber extends JPanel {
         private javax.swing.text.JTextComponent component;
         public TextLineNumber(javax.swing.text.JTextComponent component) {
@@ -294,20 +306,12 @@ public class CompiladorGUI extends JFrame {
         }
     }
 
-    // =========================================================
-    // GETTERS: La forma en que otras clases interactúan con la GUI
-    // =========================================================
-    
     public JTextArea getEditorCodigo() { return editorCodigo; }
     public JLabel getLabelRutaArchivo() { return labelRutaArchivo; }
-    
     public JButton getBtnAbrir() { return btnAbrir; }
     public JButton getBtnCompilar() { return btnCompilar; }
     public JButton getBtnCrearXls() { return btnCrearXls; }
-    
     public DefaultTableModel getModeloTokens() { return modeloTokens; }
     public DefaultTableModel getModeloErrores() { return modeloErrores; }
     public DefaultTableModel getModeloPila() { return modeloPila; }
-
-    // Ya no necesitamos el método main() aquí, lo pondremos en tu clase principal o controlador.
 }

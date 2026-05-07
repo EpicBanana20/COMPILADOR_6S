@@ -1,12 +1,17 @@
+package com.compilador;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 public class Compilacion {
 
     private CompiladorGUI gui;
     private LecturaMatriz lectorMatriz;
 
-    // 1. DICCIONARIO DE PALABRAS RESERVADAS CON SUS TOKENS ASIGNADOS (-71 en adelante)
     private static final Map<String, String> PALABRAS_RESERVADAS = new LinkedHashMap<>();
 
     static {
@@ -31,12 +36,11 @@ public class Compilacion {
     }
 
     public void ejecutar() {
-        // 1. Limpiamos las tablas de la interfaz antes de empezar
+
         gui.getModeloTokens().setRowCount(0);
         gui.getModeloErrores().setRowCount(0);
         gui.getModeloPila().setRowCount(0);
 
-        // 2. Obtenemos el texto que escribió el usuario y la matriz
         String codigoFuente = gui.getEditorCodigo().getText();
         Map<String, Map<String, String>> matriz = lectorMatriz.getMatriz();
 
@@ -47,36 +51,29 @@ public class Compilacion {
             return;
         }
 
-        // 3. Estructura para contar: Map<Clasificación, Map<Elemento, Cantidad>>
-        Map<String, Map<String, Integer>> contadores = new LinkedHashMap<>();
+        Map<String, Integer> contadores = new LinkedHashMap<>();
 
-        // 4. Variables para recorrer el texto
         String estadoActual = "0";
         StringBuilder lexemaActual = new StringBuilder();
         int lineaActual = 1;
 
-        // Añadimos un espacio final al código para obligar al autómata a procesar el último token
         codigoFuente += "\0";
 
-        // 5. EL CICLO PRINCIPAL
         for (int i = 0; i < codigoFuente.length(); i++) {
             char c = codigoFuente.charAt(i);
 
-            // Al leer un salto de línea, pasamos a la siguiente
             if (c == '\n')
                 lineaActual++;
 
             String columna = clasificarCaracter(c);
-            System.out.println(clasificarCaracter(c));
             Map<String, String> filaEstado = matriz.get(estadoActual);
             
             if (filaEstado == null) {
                 String lexError = lexemaActual.toString();
-                // Si el error salta por un \n, el token roto era de la línea anterior
                 int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
-                
-                registrarError("Error Crítico", "Estado inexistente [" + estadoActual + "]", lexError, lineaRegistro);
-                registrarConteo(contadores, "Errores Críticos", lexError);
+
+                registrarError("500", "Estado inexistente [" + estadoActual + "]", lexError, lineaRegistro);
+                registrarConteo(contadores, "Errores Críticos");
                 
                 estadoActual = "0";
                 lexemaActual.setLength(0);
@@ -89,26 +86,28 @@ public class Compilacion {
 
             String siguienteEstado = filaEstado.get(columna);
 
-            // Validar si la celda es null o está vacía (Transición no definida)
             if (siguienteEstado == null || siguienteEstado.trim().isEmpty()) {
                 String lexError = (lexemaActual.toString() + c).trim();
                 int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
-                
-                registrarError("Error Léxico", "Transición no definida para '" + c + "'", lexError, lineaRegistro);
-                registrarConteo(contadores, "Errores Léxicos", lexError);
+
+                registrarError("500", "Transición no definida para '" + c + "'", lexError, lineaRegistro);
+                registrarConteo(contadores, "Errores Léxicos");
                 
                 estadoActual = "0";
                 lexemaActual.setLength(0);
                 continue; 
             }
 
+            // ====================================================================
+            // DETECCIÓN DE ERRORES DIRECTOS DE LA MATRIZ (500, 501, 502, etc.)
+            // ====================================================================
             if (siguienteEstado.length() >= 3 && (siguienteEstado.startsWith("50") || siguienteEstado.startsWith("51"))) {
                 String lexError = (lexemaActual.toString() + c).replace("\0", "").trim();
                 int lineaRegistro = (c == '\n' || c == '\0') ? lineaActual - 1 : lineaActual;
                 String descError = obtenerDescripcionError(siguienteEstado);
                 
-                registrarError("Error Léxico", descError, lexError, lineaRegistro);
-                registrarConteo(contadores, "Errores Léxicos", lexError);
+                registrarError(siguienteEstado, descError, lexError, lineaRegistro);
+                registrarConteo(contadores, "Errores Léxicos");
                 
                 estadoActual = "0";
                 lexemaActual.setLength(0);
@@ -123,7 +122,7 @@ public class Compilacion {
                 String palabraFormada = lexemaActual.toString().trim();
                 String familia = obtenerAgrupacion(tokenEncontrado);
 
-                // RESTRICCIÓN CORREGIDA: Solo aplicamos lógica de diccionario si el autómata arrojó -70
+                // RESTRICCIÓN: Solo aplicamos lógica de diccionario si el autómata arrojó -70
                 if (tokenEncontrado.equals("-70")) {
                     if (PALABRAS_RESERVADAS.containsKey(palabraFormada)) {
                         tokenEncontrado = PALABRAS_RESERVADAS.get(palabraFormada); 
@@ -136,10 +135,9 @@ public class Compilacion {
                             familia = "Palabras Reservadas";
                         }
                     } else {
-                        // ERROR: Llegó como -70 pero no es una palabra válida de nuestra lista
                         int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
-                        registrarError("Error Léxico", "Palabra reservada no reconocida", palabraFormada, lineaRegistro);
-                        registrarConteo(contadores, "Errores Léxicos", palabraFormada);
+                        registrarError("500", "Palabra reservada no reconocida", palabraFormada, lineaRegistro);
+                        registrarConteo(contadores, "Errores Léxicos");
                         
                         estadoActual = "0";
                         lexemaActual.setLength(0);
@@ -157,7 +155,7 @@ public class Compilacion {
                     gui.getModeloTokens().addRow(new Object[] { tokenEncontrado, palabraFormada, lineaRegistro });
                 }
                 
-                registrarConteo(contadores, familia, palabraFormada); 
+                registrarConteo(contadores, familia); 
                 
                 estadoActual = "0";
                 lexemaActual.setLength(0);
@@ -174,15 +172,12 @@ public class Compilacion {
 
             estadoActual = siguienteEstado;
 
-            // ====================================================================
-            // MANEJO DE ACEPTACIÓN DIRECTA (Llegamos a un estado final)
-            // ====================================================================
+
             if (estadoActual.startsWith("-")) {
                 String tokenEncontrado = estadoActual;
                 String palabraFormada = lexemaActual.toString().trim();
                 String familia = obtenerAgrupacion(tokenEncontrado);
 
-                // RESTRICCIÓN CORREGIDA: Solo aplicamos lógica de diccionario si el autómata arrojó -70
                 if (tokenEncontrado.equals("-70")) {
                     if (PALABRAS_RESERVADAS.containsKey(palabraFormada)) {
                         tokenEncontrado = PALABRAS_RESERVADAS.get(palabraFormada);
@@ -195,10 +190,9 @@ public class Compilacion {
                             familia = "Palabras Reservadas";
                         }
                     } else {
-                        // ERROR: Llegó como -70 pero no es una palabra válida de nuestra lista
                         int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
-                        registrarError("Error Léxico", "Palabra reservada no reconocida", palabraFormada, lineaRegistro);
-                        registrarConteo(contadores, "Errores Léxicos", palabraFormada);
+                        registrarError("500", "Palabra reservada no reconocida", palabraFormada, lineaRegistro);
+                        registrarConteo(contadores, "Errores Léxicos");
                         
                         estadoActual = "0";
                         lexemaActual.setLength(0);
@@ -216,7 +210,7 @@ public class Compilacion {
                     gui.getModeloTokens().addRow(new Object[] { tokenEncontrado, palabraFormada, lineaRegistro });
                 }
                 
-                registrarConteo(contadores, familia, palabraFormada);
+                registrarConteo(contadores, familia);
 
                 estadoActual = "0";
                 lexemaActual.setLength(0);
@@ -227,24 +221,45 @@ public class Compilacion {
             }
         }
 
-        // 6. VOLCAR CONTADORES A LA TABLA PILA AL FINALIZAR
-        for (Map.Entry<String, Map<String, Integer>> entryClasificacion : contadores.entrySet()) {
-            String clasificacion = entryClasificacion.getKey();
-            for (Map.Entry<String, Integer> entryElemento : entryClasificacion.getValue().entrySet()) {
-                String elemento = entryElemento.getKey();
-                int cantidad = entryElemento.getValue();
-                gui.getModeloPila().addRow(new Object[]{clasificacion, elemento, cantidad});
+        List<String> ordenDeseado = Arrays.asList(
+            "Operadores matematicos", "Operadores postfix", "Operadores de asignacion",
+            "Operador exponente", "Operadores relacionales", 
+            "Operadores sin igualdad de conversion de tipo", "Operadores de turno",
+            "Operadores logicos", "Operadores logicos binarios", "Operador ternario",
+            "Operador de control", "Operador de agrupamiento",
+            "Palabras Reservadas",
+            "Comentarios",
+            "Cadena",
+            "Numerica Binario", "Numerica Decimal", "Numerica Octal", "Numerica Hexadecimal", 
+            "Numerica Real", "Numerica Exponencial",
+            "Constantes Booleanas", "Constante nula",
+            "Cadena Identificador", "Numerica Binario Identificador", 
+            "Numerica Decimal Identificador", "Numerica Octal Identificador", 
+            "Numerica Hexadecimal Identificador", "Real Identificador", 
+            "Exponencial Identificador", "Booleana Identificador"
+        );
+
+        Set<String> categoriasImpresas = new HashSet<>();
+        
+        for (String categoria : ordenDeseado) {
+            if (contadores.containsKey(categoria)) {
+                gui.getModeloPila().addRow(new Object[]{categoria, contadores.get(categoria)});
+                categoriasImpresas.add(categoria);
+            }
+        }
+
+        for (Map.Entry<String, Integer> entry : contadores.entrySet()) {
+            if (!categoriasImpresas.contains(entry.getKey())) {
+                gui.getModeloPila().addRow(new Object[]{entry.getKey(), entry.getValue()});
             }
         }
     }
 
     // --- MÉTODOS AUXILIARES ---
 
-    private void registrarConteo(Map<String, Map<String, Integer>> contadores, String clasificacion, String elemento) {
-        if (elemento == null || elemento.trim().isEmpty()) return;
-        contadores.putIfAbsent(clasificacion, new LinkedHashMap<>());
-        Map<String, Integer> elementos = contadores.get(clasificacion);
-        elementos.put(elemento, elementos.getOrDefault(elemento, 0) + 1);
+    private void registrarConteo(Map<String, Integer> contadores, String clasificacion) {
+        if (clasificacion == null || clasificacion.trim().isEmpty()) return;
+        contadores.put(clasificacion, contadores.getOrDefault(clasificacion, 0) + 1);
     }
 
     private void registrarError(String tokenError, String descripcion, String lexema, int linea) {
@@ -253,18 +268,18 @@ public class Compilacion {
 
     private String obtenerDescripcionError(String estadoError) {
         switch (estadoError) {
-            case "500": return "Error 500: Se espera un caracter valido";
-            case "501": return "Error 501: Cadena sin cerrar";
-            case "502": return "Error 502: Flotante incompleto";
-            case "503": return "Error 503: Exponente incompleto";
-            case "504": return "Error 504: Base numerica invalida";
-            case "505": return "Error 505: Binario incompleto";
-            case "506": return "Error 506: Octal incompleto";
-            case "507": return "Error 507: Hexadecimal incompleto";
-            case "508": return "Error 508: Identificador incompleto";
-            case "509": return "Error 509: Se esperaba B,D,O,X";
-            case "510": return "Error 510: Se esperaba un elemento alfabetico";
-            case "511": return "Error 511: Comentario sin cerrar";
+            case "500": return "Error: Se espera un caracter valido";
+            case "501": return "Error: Cadena sin cerrar";
+            case "502": return "Error: Flotante incompleto";
+            case "503": return "Error: Exponente incompleto";
+            case "504": return "Error: Base numerica invalida";
+            case "505": return "Error: Binario incompleto";
+            case "506": return "Error: Octal incompleto";
+            case "507": return "Error: Hexadecimal incompleto";
+            case "508": return "Error: Identificador incompleto";
+            case "509": return "Error: Se esperaba B,D,O,X";
+            case "510": return "Error: Se esperaba un elemento alfabetico";
+            case "511": return "Error: Comentario sin cerrar";
             default: return "Error léxico (" + estadoError + ")";
         }
     }
@@ -281,8 +296,10 @@ public class Compilacion {
             case "-8": return "Operador exponente";
             case "-9": return "Operadores de asignacion";
             case "-10": return "Operadores matematicos";
-            case "-11": return "Comentario grupal";
-            case "-12": return "Comentario lineal";
+            
+            case "-11": case "-12": 
+                return "Comentarios";
+                
             case "-13": return "Operadores de asignacion";
             case "-14": return "Operadores matematicos";
             case "-15": return "Operadores de asignacion";

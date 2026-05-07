@@ -1,3 +1,5 @@
+package com.compilador;
+
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
@@ -11,22 +13,25 @@ public class Main {
         }
 
         SwingUtilities.invokeLater(() -> {
-            // 1. Inicializamos la GUI
+            // INICIALIZACIÓN GUI
             CompiladorGUI ventana = new CompiladorGUI();
             
-            // 2. Cargamos la Matriz
+            // CARGAR MATRIZ
             LecturaMatriz lectorMatriz = new LecturaMatriz();
             lectorMatriz.cargarMatriz("C2A6.csv");
             
-            // 3. Conectamos "Abrir Archivo"
+            // ABRIR ARCHIVO
             AbrirArchivo logicaAbrir = new AbrirArchivo(ventana);
             ventana.getBtnAbrir().addActionListener(e -> logicaAbrir.ejecutar());
 
-            // 4. ¡LA NUEVA CONEXIÓN DE COMPILACIÓN!
+            // COMPILACIÓN
             Compilacion logicaCompilar = new Compilacion(ventana, lectorMatriz);
             ventana.getBtnCompilar().addActionListener(e -> logicaCompilar.ejecutar());
 
-            // 5. Mostramos la ventana
+            // CREACIÓN DEL EXCEL
+            CrearXLS logicaExcel = new CrearXLS(ventana);
+            ventana.getBtnCrearXls().addActionListener(e -> logicaExcel.ejecutar());
+            
             ventana.setVisible(true);
         });
     }
