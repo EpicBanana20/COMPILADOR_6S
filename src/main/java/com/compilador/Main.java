@@ -16,9 +16,27 @@ public class Main {
             // INICIALIZACIÓN GUI
             CompiladorGUI ventana = new CompiladorGUI();
             
-            // CARGAR MATRIZ
+            // CARGAR MATRIZ LÉXICA
             LecturaMatriz lectorMatriz = new LecturaMatriz();
             lectorMatriz.cargarMatriz("C2A6.csv");
+            
+            // CARGAR MATRIZ DEL PARSER (Sintaxis)
+            lectorMatriz.cargarMatrizParser("C3A4_ALEXMEZA.csv");
+            
+            // CARGAR PRODUCCIONES GRAMATICALES
+            lectorMatriz.cargarProducciones("producciones_gramatica.csv");
+            
+            // Imprimir para verificar
+            System.out.println("\n=== VERIFICACIÓN DE CARGA ===");
+            System.out.println("Estados léxicos: " + lectorMatriz.getMatriz().size());
+            System.out.println("No terminales: " + lectorMatriz.getMatrizParser().size());
+            System.out.println("Producciones: " + lectorMatriz.getProducciones().size());
+            
+            // Mostrar ejemplo de producciones
+            System.out.println("\n--- Ejemplo de producciones ---");
+            System.out.println("Prod 1: " + lectorMatriz.getProduccion(1));
+            System.out.println("Prod 78: " + lectorMatriz.getProduccion(78));
+            System.out.println("Prod 82: " + lectorMatriz.getProduccion(82));
             
             // ABRIR ARCHIVO
             AbrirArchivo logicaAbrir = new AbrirArchivo(ventana);
