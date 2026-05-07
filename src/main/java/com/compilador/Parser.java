@@ -12,6 +12,7 @@ public class Parser {
     private int posicionActual;
     private Stack<String> pila;
     private List<String> erroresSintacticos;
+    private Map<String, Integer> contadoresDiagramasPrincipales;
 
     public static class Token {
         public String token;
@@ -35,6 +36,7 @@ public class Parser {
         this.tokens = new ArrayList<>();
         this.pila = new Stack<>();
         this.erroresSintacticos = new ArrayList<>();
+        this.contadoresDiagramasPrincipales = new java.util.LinkedHashMap<>();
     }
 
     public void ejecutar(List<Token> tokensRecibidos) {
@@ -42,6 +44,7 @@ public class Parser {
         this.posicionActual = 0;
         this.pila = new Stack<>();
         this.erroresSintacticos = new ArrayList<>();
+        this.contadoresDiagramasPrincipales = new java.util.LinkedHashMap<>();
 
         System.out.println("\n========== INICIO DEL ANALISIS SINTACTICO ==========");
         System.out.println("Total de tokens recibidos: " + tokens.size());
@@ -90,6 +93,11 @@ public class Parser {
                     pila.pop();
                     List<String> produccion = lectorMatriz.getProduccion(codigoProduccion);
                     String noTerminalNormalizado = normalizarNoTerminal(cimaPila);
+
+                    if (esDiagramaPrincipal(noTerminalNormalizado)) {
+                        contadoresDiagramasPrincipales.put(noTerminalNormalizado, 
+                            contadoresDiagramasPrincipales.getOrDefault(noTerminalNormalizado, 0) + 1);
+                    }
 
                     System.out.println("Aplicando producción " + codigoProduccion + ": " + noTerminalNormalizado + " -> " + 
                         (produccion.isEmpty() ? "EPSILON" : produccion));
@@ -312,5 +320,24 @@ public class Parser {
 
     public List<String> getErroresSintacticos() {
         return erroresSintacticos;
+    }
+
+    public Map<String, Integer> getContadoresDiagramasPrincipales() {
+        return contadoresDiagramasPrincipales;
+    }
+
+    private boolean esDiagramaPrincipal(String noTerminal) {
+        String[] diagramasPrincipales = {
+            "PROGRAMA", "STATU", "OR", "AND", "EXP_PAS", "SIMPLE_EXP_PASCAL",
+            "TERMINO_PASCAL", "ELEVACION", "FACTOR", "CONSTANTE_S_SIGNO",
+            "DECLARACION_CONSTANTES", "CONST_NUMERICA", "ARR", "ASIG", "FUNCION",
+            "LISTA_DE_PARAMETROS"
+        };
+        for (String diag : diagramasPrincipales) {
+            if (noTerminal.equals(diag)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

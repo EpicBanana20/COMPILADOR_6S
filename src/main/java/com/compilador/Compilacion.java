@@ -18,12 +18,16 @@ public class Compilacion {
 
     static {
         String[] palabras = {
-            "if", "else", "switch", "for", "do", "while", "console.log", "forEach", "break", 
-            "continue", "let", "const", "undefined", "interface", "typeof", "any", "set", 
-            "get", "class", "toLowerCase", "toUpperCase", "length", "trim", "charAt", 
-            "startsWith", "endsWith", "indexOf", "Includes", "slice", "replace", "split", 
-            "push", "shift", "in", "of", "splice", "concat", "find", "findIndex", "filter", 
-            "map", "sort", "reverse", "true", "false", "null"
+            // Control
+            "if", "else", "elseif", "switch", "case", "default", "for", "do", "while", "break", "return",
+            // Declaraciones
+            "reg", "var", "def",
+            // Consola
+            "Console.read", "Console.log",
+            // Funciones integradas
+            "CLEAR", "SQRT", "POW", "SQRTV", "STRLEN", "sin", "cos", "tan", "chr", "pred", "succ", "inc", "dec", "sqr", "copy", "val", "str",
+            // Extra (mantener algunas)
+            "console.log", "true", "false", "null", "continue", "class"
         };
         int tokenActual = -71;
         for (String palabra : palabras) {
