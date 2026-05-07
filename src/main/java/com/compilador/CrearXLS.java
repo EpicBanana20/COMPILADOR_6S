@@ -270,8 +270,8 @@ public class CrearXLS {
         String[] diagramas = {
             "PROGRAMA", "LISTA_DE_PARAMETROS", "EXP_PAS", "CONSTANTE_S_SIGNO",
             "CONST_NUMERICA", "OR", "AND", "DECLARACION_CONSTANTES", "FACTOR",
-            "ELEVACION", "TERMINO_PASCAL", "Simple_Exp_Pascal", "STATU",
-            "Funcion", "ASIG", "ARR"
+            "ELEVACION", "TERMINO_PASCAL", "SIMPLE_EXP_PASCAL", "STATU",
+            "FUNCION", "ASIG", "ARR"
         };
 
         Row row1 = sheet.createRow(0);

@@ -10,6 +10,7 @@ com\compilador\LecturaMatriz.class
 com\compilador\CompiladorGUI$3.class
 com\compilador\CompiladorGUI$ScrollBarPersonalizada.class
 com\compilador\CrearXLS.class
+com\compilador\PruebasParser.class
 com\compilador\Compilacion.class
 com\compilador\Main.class
 com\compilador\Parser$Token.class
