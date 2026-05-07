@@ -16,7 +16,7 @@ public class PruebaParser {
 
         System.out.println("=== CSVs cargados correctamente ===\n");
 
-        Parser parser = new Parser(lectorMatriz);
+        Parser parser = new Parser(lectorMatriz, null);
 
         System.out.println("\n=== PRUEBA: ElseIf (palabra reservada nueva) ===");
         List<Parser.Token> tokens = crearTokensElseIf();

@@ -8,6 +8,7 @@ import java.util.Stack;
 public class Parser {
 
     private LecturaMatriz lectorMatriz;
+    private CompiladorGUI gui;
     private List<Token> tokens;
     private int posicionActual;
     private Stack<String> pila;
@@ -31,8 +32,9 @@ public class Parser {
         }
     }
 
-    public Parser(LecturaMatriz lectorMatriz) {
+    public Parser(LecturaMatriz lectorMatriz, CompiladorGUI gui) {
         this.lectorMatriz = lectorMatriz;
+        this.gui = gui;
         this.tokens = new ArrayList<>();
         this.pila = new Stack<>();
         this.erroresSintacticos = new ArrayList<>();
@@ -81,6 +83,9 @@ public class Parser {
                 } else {
                     System.out.println(">>> ERROR: Se esperaba EOF pero se encontró: " + simboloActual);
                     erroresSintacticos.add("Error en línea " + (tokenActual != null ? tokenActual.linea : 0) + ": Se esperaba FIN DE ARCHIVO");
+                    if (gui != null) {
+                        gui.getModeloErrores().addRow(new Object[] { "SYNTAX", "Se esperaba FIN DE ARCHIVO", "$", "Sintáctico", String.valueOf(tokenActual != null ? tokenActual.linea : 0) });
+                    }
                     analisisExitoso = false;
                     break;
                 }
@@ -90,6 +95,19 @@ public class Parser {
                 Integer codigoProduccion = obtenerCodigoProduccion(cimaPila, simboloActual);
 
                 if (codigoProduccion != null) {
+                    if (esCodigoError(codigoProduccion)) {
+                        String descripcion = obtenerDescripcionErrorSintactico(codigoProduccion);
+                        int lineaError = (tokenActual != null) ? tokenActual.linea : 0;
+                        
+                        System.out.println(">>> ERROR SINTACTICO [" + codigoProduccion + "]: " + descripcion);
+                        erroresSintacticos.add("Error " + codigoProduccion + " en línea " + lineaError + ": " + descripcion);
+                        if (gui != null) {
+                            gui.getModeloErrores().addRow(new Object[] { String.valueOf(codigoProduccion), descripcion, simboloActual, "Sintáctico", String.valueOf(lineaError) });
+                        }
+                        analisisExitoso = false;
+                        break;
+                    }
+                    
                     pila.pop();
                     List<String> produccion = lectorMatriz.getProduccion(codigoProduccion);
                     String noTerminalNormalizado = normalizarNoTerminal(cimaPila);
@@ -115,6 +133,9 @@ public class Parser {
                     System.out.println(">>> ERROR: No hay producción para " + cimaNorm + " con token " + simboloActual);
                     erroresSintacticos.add("Error en línea " + (tokenActual != null ? tokenActual.linea : 0) + 
                         ": No se esperaba '" + simboloActual + "' después de '" + cimaNorm + "'");
+                    if (gui != null) {
+                        gui.getModeloErrores().addRow(new Object[] { "SYNTAX", "No se esperaba '" + simboloActual + "' después de '" + cimaNorm + "'", simboloActual, "Sintáctico", String.valueOf(tokenActual != null ? tokenActual.linea : 0) });
+                    }
                     analisisExitoso = false;
                     break;
                 }
@@ -136,6 +157,9 @@ public class Parser {
                     System.out.println(">>> ERROR: Se esperaba '" + cimaNorm + "' pero se encontró '" + simboloActual + "'");
                     erroresSintacticos.add("Error en línea " + (tokenActual != null ? tokenActual.linea : 0) + 
                         ": Se esperaba '" + cimaNorm + "' pero se encontró '" + simboloActual + "'");
+                    if (gui != null) {
+                        gui.getModeloErrores().addRow(new Object[] { "SYNTAX", "Se esperaba '" + cimaNorm + "' pero se encontró '" + simboloActual + "'", simboloActual, "Sintáctico", String.valueOf(tokenActual != null ? tokenActual.linea : 0) });
+                    }
                     analisisExitoso = false;
                     break;
                 }
@@ -201,6 +225,49 @@ public class Parser {
         }
         
         return false;
+    }
+
+    private boolean esCodigoError(int codigo) {
+        return codigo >= 512 && codigo <= 544;
+    }
+
+    private String obtenerDescripcionErrorSintactico(int codigoError) {
+        switch (codigoError) {
+            case 512: return "Se esperaba una expresión";
+            case 513: return "Se esperaba un término";
+            case 514: return "Se esperaba un factor (constante, identificador, expresión, función o paréntesis)";
+            case 515: return "Se esperaba una constante numérica (Binario, Decimal, Octal o Hexadecimal)";
+            case 516: return "Se esperaba una constante (numérica, real, cadena, true, false, exponencial o null)";
+            case 517: return "Se esperaba una constante con o sin signo";
+            case 518: return "Se esperaba una declaración válida (reg, var, def, id, main)";
+            case 519: return "Se esperaba una sentencia válida o expresión";
+            case 520: return "Se esperaba '[' para iniciar arreglo";
+            case 521: return "Se esperaba un operador de asignación (=, +=, -=, *=, /=)";
+            case 522: return "Se esperaba el nombre de una función";
+            case 523: return "Se esperaba '(' para iniciar la lista de parámetros";
+            case 524: return "Se esperaba ',' o ')'";
+            case 525: return "Se esperaba ',' o ']'";
+            case 526: return "Se esperaba ',' o ';'";
+            case 527: return "Se esperaba ',' o '}'";
+            case 528: return "Se esperaba ';' o '}'";
+            case 529: return "Se esperaba ';' o ':'";
+            case 530: return "Se esperaba un operador o continuación válida después del identificador";
+            case 531: return "Se esperaba un operador de asignación o cierre";
+            case 532: return "Se esperaba '?' o continuación válida";
+            case 533: return "Se esperaba una expresión o ')'";
+            case 534: return "Se esperaba '^' o continuación válida";
+            case 535: return "Se esperaba un operador multiplicativo (*, /, #, %) o continuación válida";
+            case 536: return "Se esperaba un operador aditivo (+, -, <<, >>, >>>) o continuación válida";
+            case 537: return "Se esperaba un operador relacional (<, >, <=, >=, ==, !=) o continuación válida";
+            case 538: return "Se esperaba '&&' o '&' o continuación válida";
+            case 539: return "Se esperaba '||' o '|' o continuación válida";
+            case 540: return "Se esperaba 'reg' o un identificador";
+            case 541: return "Se esperaba '[' o continuación válida";
+            case 542: return "Se esperaba 'elseif', 'else' o continuación válida";
+            case 543: return "Se esperaba 'case', 'default' o '}'";
+            case 544: return "Fin de archivo inesperado: el programa está incompleto";
+            default: return "Error sintáctico (código: " + codigoError + ")";
+        }
     }
 
     private Integer obtenerCodigoProduccion(String noTerminal, String token) {
@@ -324,6 +391,10 @@ public class Parser {
 
     public Map<String, Integer> getContadoresDiagramasPrincipales() {
         return contadoresDiagramasPrincipales;
+    }
+
+    public int getTotalErroresSintacticos() {
+        return erroresSintacticos.size();
     }
 
     private boolean esDiagramaPrincipal(String noTerminal) {

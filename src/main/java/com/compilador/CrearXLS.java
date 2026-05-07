@@ -23,9 +23,11 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 public class CrearXLS {
 
     private CompiladorGUI gui;
+    private Parser parser;
 
-    public CrearXLS(CompiladorGUI gui) {
+    public CrearXLS(CompiladorGUI gui, Parser parser) {
         this.gui = gui;
+        this.parser = parser;
     }
 
     public void ejecutar() {
@@ -41,11 +43,13 @@ public class CrearXLS {
                 file += ".xlsx";
             }
             String rutaAbsoluta = new File(dir, file).getAbsolutePath();
-            generarExcel(rutaAbsoluta, gui.getModeloTokens(), gui.getModeloErrores(), gui.getModeloPila());
+            Map<String, Integer> contadoresSintaxis = parser != null ? parser.getContadoresDiagramasPrincipales() : new java.util.LinkedHashMap<>();
+            int totalErroresSintacticos = parser != null ? parser.getTotalErroresSintacticos() : 0;
+            generarExcel(rutaAbsoluta, gui.getModeloTokens(), gui.getModeloErrores(), gui.getModeloPila(), contadoresSintaxis, totalErroresSintacticos);
         }
     }
 
-    private void generarExcel(String rutaAbsoluta, DefaultTableModel modeloTokens, DefaultTableModel modeloErrores, DefaultTableModel modeloContadores) {
+    private void generarExcel(String rutaAbsoluta, DefaultTableModel modeloTokens, DefaultTableModel modeloErrores, DefaultTableModel modeloContadores, Map<String, Integer> contadoresSintaxis, int totalErroresSintacticos) {
         try (Workbook workbook = new XSSFWorkbook()) {
 
             // =========================================================
@@ -67,6 +71,10 @@ public class CrearXLS {
             // --- 3. Hoja de CONTADORES ---
             Sheet sheetContadores = workbook.createSheet("CONTADORES");
             escribirTablaContadores(sheetContadores, modeloContadores, estiloCentrado);
+
+            // --- 4. Hoja de SINTASIS ---
+            Sheet sheetSintaxis = workbook.createSheet("Sintaxis");
+            escribirTablaSintaxis(sheetSintaxis, contadoresSintaxis, totalErroresSintacticos, estiloCentrado);
 
             // Guardamos el archivo físicamente 
             try (FileOutputStream fileOut = new FileOutputStream(rutaAbsoluta)) {
@@ -255,6 +263,37 @@ public class CrearXLS {
                     }
                 }
             }
+        }
+    }
+
+    private void escribirTablaSintaxis(Sheet sheet, Map<String, Integer> contadoresSintaxis, int totalErroresSintacticos, CellStyle estilo) {
+        String[] diagramas = {
+            "PROGRAMA", "LISTA_DE_PARAMETROS", "EXP_PAS", "CONSTANTE_S_SIGNO",
+            "CONST_NUMERICA", "OR", "AND", "DECLARACION_CONSTANTES", "FACTOR",
+            "ELEVACION", "TERMINO_PASCAL", "Simple_Exp_Pascal", "STATU",
+            "Funcion", "ASIG", "ARR"
+        };
+
+        Row row1 = sheet.createRow(0);
+        Row row2 = sheet.createRow(1);
+
+        Cell cellA1 = row1.createCell(0);
+        cellA1.setCellValue("ERRORES");
+        cellA1.setCellStyle(estilo);
+
+        Cell cellA2 = row2.createCell(0);
+        cellA2.setCellValue(String.valueOf(totalErroresSintacticos));
+        cellA2.setCellStyle(estilo);
+
+        for (int i = 0; i < diagramas.length; i++) {
+            Cell headerCell = row1.createCell(i + 1);
+            headerCell.setCellValue(diagramas[i]);
+            headerCell.setCellStyle(estilo);
+
+            int conteo = contadoresSintaxis.containsKey(diagramas[i]) ? contadoresSintaxis.get(diagramas[i]) : 0;
+            Cell valueCell = row2.createCell(i + 1);
+            valueCell.setCellValue(String.valueOf(conteo));
+            valueCell.setCellStyle(estilo);
         }
     }
 }

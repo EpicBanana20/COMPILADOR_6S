@@ -44,14 +44,14 @@ public class Main {
 
             // COMPILACIÓN (Léxico + Sintaxis)
             Compilacion logicaCompilar = new Compilacion(ventana, lectorMatriz);
-            Parser parser = new Parser(lectorMatriz);
+            Parser parser = new Parser(lectorMatriz, ventana);
             ventana.getBtnCompilar().addActionListener(e -> {
                 logicaCompilar.ejecutar();
                 parser.ejecutar(logicaCompilar.getTokensAnalizados());
             });
 
             // CREACIÓN DEL EXCEL
-            CrearXLS logicaExcel = new CrearXLS(ventana);
+            CrearXLS logicaExcel = new CrearXLS(ventana, parser);
             ventana.getBtnCrearXls().addActionListener(e -> logicaExcel.ejecutar());
             
             ventana.setVisible(true);
