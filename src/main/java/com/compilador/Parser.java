@@ -1,6 +1,7 @@
 package com.compilador;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
@@ -14,6 +15,123 @@ public class Parser {
     private Stack<String> pila;
     private List<String> erroresSintacticos;
     private Map<String, Integer> contadoresDiagramasPrincipales;
+
+    private static final Map<String, String> CODIGO_A_TOKEN = new LinkedHashMap<>();
+
+    static {
+        CODIGO_A_TOKEN.put("-1", "+");
+        CODIGO_A_TOKEN.put("-2", "++");
+        CODIGO_A_TOKEN.put("-3", "+=");
+        CODIGO_A_TOKEN.put("-4", "-");
+        CODIGO_A_TOKEN.put("-5", "--");
+        CODIGO_A_TOKEN.put("-6", "-=");
+        CODIGO_A_TOKEN.put("-7", "*");
+        CODIGO_A_TOKEN.put("-8", "**");
+        CODIGO_A_TOKEN.put("-9", "*=");
+        CODIGO_A_TOKEN.put("-10", "/");
+        CODIGO_A_TOKEN.put("-11", "/**/");
+        CODIGO_A_TOKEN.put("-12", "//");
+        CODIGO_A_TOKEN.put("-13", "/=");
+        CODIGO_A_TOKEN.put("-14", "%");
+        CODIGO_A_TOKEN.put("-15", "%=");
+        CODIGO_A_TOKEN.put("-16", "=");
+        CODIGO_A_TOKEN.put("-17", "=>");
+        CODIGO_A_TOKEN.put("-18", "==");
+        CODIGO_A_TOKEN.put("-19", "===");
+        CODIGO_A_TOKEN.put("-20", "<");
+        CODIGO_A_TOKEN.put("-21", "<<");
+        CODIGO_A_TOKEN.put("-22", "<=");
+        CODIGO_A_TOKEN.put("-23", "<>");
+        CODIGO_A_TOKEN.put("-24", "<<=");
+        CODIGO_A_TOKEN.put("-25", ">");
+        CODIGO_A_TOKEN.put("-26", ">=");
+        CODIGO_A_TOKEN.put("-27", ">>");
+        CODIGO_A_TOKEN.put("-28", ">>=");
+        CODIGO_A_TOKEN.put("-29", ">>>");
+        CODIGO_A_TOKEN.put("-30", ">>>=");
+        CODIGO_A_TOKEN.put("-31", "!");
+        CODIGO_A_TOKEN.put("-32", "!=");
+        CODIGO_A_TOKEN.put("-33", "!==");
+        CODIGO_A_TOKEN.put("-34", "&");
+        CODIGO_A_TOKEN.put("-35", "&=");
+        CODIGO_A_TOKEN.put("-36", "&&");
+        CODIGO_A_TOKEN.put("-37", "|");
+        CODIGO_A_TOKEN.put("-38", "||");
+        CODIGO_A_TOKEN.put("-39", "^");
+        CODIGO_A_TOKEN.put("-40", "^=");
+        CODIGO_A_TOKEN.put("-41", "~");
+        CODIGO_A_TOKEN.put("-42", "?");
+        CODIGO_A_TOKEN.put("-43", ",");
+        CODIGO_A_TOKEN.put("-44", ".");
+        CODIGO_A_TOKEN.put("-45", ";");
+        CODIGO_A_TOKEN.put("-46", ":");
+        CODIGO_A_TOKEN.put("-47", "{");
+        CODIGO_A_TOKEN.put("-48", "}");
+        CODIGO_A_TOKEN.put("-49", "[");
+        CODIGO_A_TOKEN.put("-50", "]");
+        CODIGO_A_TOKEN.put("-51", "(");
+        CODIGO_A_TOKEN.put("-52", ")");
+        CODIGO_A_TOKEN.put("-53", "\"");
+        CODIGO_A_TOKEN.put("-54", "'");
+
+        CODIGO_A_TOKEN.put("-55", "Const_Decimal");
+        CODIGO_A_TOKEN.put("-56", "Const_real");
+        CODIGO_A_TOKEN.put("-57", "Const_Exponencial");
+        CODIGO_A_TOKEN.put("-58", "Const_cadena");
+        CODIGO_A_TOKEN.put("-59", "Binario");
+        CODIGO_A_TOKEN.put("-60", "Const_Octal");
+        CODIGO_A_TOKEN.put("-61", "Const_Hexadecimal");
+        CODIGO_A_TOKEN.put("-62", "Cadena Identificador");
+        CODIGO_A_TOKEN.put("-63", "Binario Identificador");
+        CODIGO_A_TOKEN.put("-64", "Decimal Identificador");
+        CODIGO_A_TOKEN.put("-65", "Octal Identificador");
+        CODIGO_A_TOKEN.put("-66", "Hexadecimal Identificador");
+        CODIGO_A_TOKEN.put("-67", "Real Identificador");
+        CODIGO_A_TOKEN.put("-68", "Exponencial Identificador");
+        CODIGO_A_TOKEN.put("-69", "Booleana Identificador");
+        CODIGO_A_TOKEN.put("-70", "id");
+
+        CODIGO_A_TOKEN.put("-71", "if");
+        CODIGO_A_TOKEN.put("-72", "else");
+        CODIGO_A_TOKEN.put("-73", "elseif");
+        CODIGO_A_TOKEN.put("-74", "switch");
+        CODIGO_A_TOKEN.put("-75", "case");
+        CODIGO_A_TOKEN.put("-76", "default");
+        CODIGO_A_TOKEN.put("-77", "for");
+        CODIGO_A_TOKEN.put("-78", "do");
+        CODIGO_A_TOKEN.put("-79", "while");
+        CODIGO_A_TOKEN.put("-80", "break");
+        CODIGO_A_TOKEN.put("-81", "return");
+        CODIGO_A_TOKEN.put("-82", "reg");
+        CODIGO_A_TOKEN.put("-83", "var");
+        CODIGO_A_TOKEN.put("-84", "def");
+        CODIGO_A_TOKEN.put("-85", "Console.read");
+        CODIGO_A_TOKEN.put("-86", "Console.log");
+        CODIGO_A_TOKEN.put("-87", "CLEAR");
+        CODIGO_A_TOKEN.put("-88", "SQRT");
+        CODIGO_A_TOKEN.put("-89", "POW");
+        CODIGO_A_TOKEN.put("-90", "SQRTV");
+        CODIGO_A_TOKEN.put("-91", "STRLEN");
+        CODIGO_A_TOKEN.put("-92", "sin");
+        CODIGO_A_TOKEN.put("-93", "cos");
+        CODIGO_A_TOKEN.put("-94", "tan");
+        CODIGO_A_TOKEN.put("-95", "chr");
+        CODIGO_A_TOKEN.put("-96", "pred");
+        CODIGO_A_TOKEN.put("-97", "succ");
+        CODIGO_A_TOKEN.put("-98", "inc");
+        CODIGO_A_TOKEN.put("-99", "dec");
+        CODIGO_A_TOKEN.put("-100", "sqr");
+        CODIGO_A_TOKEN.put("-101", "copy");
+        CODIGO_A_TOKEN.put("-102", "val");
+        CODIGO_A_TOKEN.put("-103", "str");
+        CODIGO_A_TOKEN.put("-104", "console.log");
+        CODIGO_A_TOKEN.put("-105", "true");
+        CODIGO_A_TOKEN.put("-106", "false");
+        CODIGO_A_TOKEN.put("-107", "null");
+        CODIGO_A_TOKEN.put("-108", "continue");
+        CODIGO_A_TOKEN.put("-109", "class");
+        CODIGO_A_TOKEN.put("-110", "main");
+    }
 
     public static class Token {
         public String token;
@@ -67,6 +185,8 @@ public class Parser {
             Token tokenActual = (posicionActual < tokens.size()) ? tokens.get(posicionActual) : null;
 
             String simboloActual = (tokenActual != null) ? tokenActual.token : "$";
+            String simboloActualNormalizado = simboloActual.startsWith("-") ? codigoAToken(simboloActual) : simboloActual;
+            if (simboloActualNormalizado == null) simboloActualNormalizado = simboloActual;
 
             System.out.println("\n--- Paso " + pasos + " ---");
             List<String> pilaNormalizada = new ArrayList<>();
@@ -74,7 +194,7 @@ public class Parser {
                 pilaNormalizada.add(normalizarNoTerminal(s));
             }
             System.out.println("Pila: " + pilaNormalizada);
-            System.out.println("Token actual: " + (tokenActual != null ? tokenActual : "FIN DE ENTRADA"));
+            System.out.println("Token actual: " + (tokenActual != null ? simboloActualNormalizado + "('" + tokenActual.lexema + "')" : "FIN DE ENTRADA"));
 
             if (cimaPila.equals("$")) {
                 if (simboloActual.equals("$")) {
@@ -92,7 +212,7 @@ public class Parser {
             }
 
             if (esNoTerminal(cimaPila)) {
-                Integer codigoProduccion = obtenerCodigoProduccion(cimaPila, simboloActual);
+                Integer codigoProduccion = obtenerCodigoProduccion(cimaPila, simboloActualNormalizado);
 
                 if (codigoProduccion != null) {
                     if (esCodigoError(codigoProduccion)) {
@@ -130,35 +250,33 @@ public class Parser {
                     }
                 } else {
                     String cimaNorm = normalizarNoTerminal(cimaPila);
-                    System.out.println(">>> ERROR: No hay producción para " + cimaNorm + " con token " + simboloActual);
-                    erroresSintacticos.add("Error en línea " + (tokenActual != null ? tokenActual.linea : 0) + 
-                        ": No se esperaba '" + simboloActual + "' después de '" + cimaNorm + "'");
+                    System.out.println(">>> ERROR: No hay producción para " + cimaNorm + " con token " + simboloActualNormalizado);
+                    erroresSintacticos.add("Error en línea " + (tokenActual != null ? tokenActual.linea : 0) +
+                        ": No se esperaba '" + simboloActualNormalizado + "' después de '" + cimaNorm + "'");
                     if (gui != null) {
-                        gui.getModeloErrores().addRow(new Object[] { "SYNTAX", "No se esperaba '" + simboloActual + "' después de '" + cimaNorm + "'", simboloActual, "Sintáctico", String.valueOf(tokenActual != null ? tokenActual.linea : 0) });
+                        gui.getModeloErrores().addRow(new Object[] { "SYNTAX", "No se esperaba '" + simboloActualNormalizado + "' después de '" + cimaNorm + "'", tokenActual != null ? tokenActual.lexema : simboloActual, "Sintáctico", String.valueOf(tokenActual != null ? tokenActual.linea : 0) });
                     }
                     analisisExitoso = false;
                     break;
                 }
             } else {
                 String cimaNormalizada = normalizarSimboloComparar(cimaPila);
-                String tokenNormalizado = normalizarToken(simboloActual);
-                
+                String tokenNormalizado = normalizarToken(simboloActualNormalizado);
+
                 boolean coinciden = cimaNormalizada.equals(tokenNormalizado);
-                
-                // Ya no hay chequeos especiales para paréntesis - tokens separados por espacios
-                
+
                 if (coinciden) {
                     String cimaNorm = normalizarNoTerminal(cimaPila);
-                    System.out.println(">>> MATCH: " + cimaNorm + " coincide con " + simboloActual);
+                    System.out.println(">>> MATCH: " + cimaNorm + " coincide con " + simboloActualNormalizado);
                     pila.pop();
                     posicionActual++;
                 } else {
                     String cimaNorm = normalizarNoTerminal(cimaPila);
-                    System.out.println(">>> ERROR: Se esperaba '" + cimaNorm + "' pero se encontró '" + simboloActual + "'");
-                    erroresSintacticos.add("Error en línea " + (tokenActual != null ? tokenActual.linea : 0) + 
-                        ": Se esperaba '" + cimaNorm + "' pero se encontró '" + simboloActual + "'");
+                    System.out.println(">>> ERROR: Se esperaba '" + cimaNorm + "' pero se encontró '" + simboloActualNormalizado + "'");
+                    erroresSintacticos.add("Error en línea " + (tokenActual != null ? tokenActual.linea : 0) +
+                        ": Se esperaba '" + cimaNorm + "' pero se encontró '" + simboloActualNormalizado + "'");
                     if (gui != null) {
-                        gui.getModeloErrores().addRow(new Object[] { "SYNTAX", "Se esperaba '" + cimaNorm + "' pero se encontró '" + simboloActual + "'", simboloActual, "Sintáctico", String.valueOf(tokenActual != null ? tokenActual.linea : 0) });
+                        gui.getModeloErrores().addRow(new Object[] { "SYNTAX", "Se esperaba '" + cimaNorm + "' pero se encontró '" + simboloActualNormalizado + "'", tokenActual != null ? tokenActual.lexema : simboloActual, "Sintáctico", String.valueOf(tokenActual != null ? tokenActual.linea : 0) });
                     }
                     analisisExitoso = false;
                     break;
@@ -285,6 +403,11 @@ public class Parser {
                 return reglas.get(tokenNormalizado);
             }
 
+            String nombreToken = codigoAToken(token);
+            if (nombreToken != null && reglas.containsKey(nombreToken)) {
+                return reglas.get(nombreToken);
+            }
+
             if (tokenNormalizado.startsWith("Const_")) {
                 String tokenBase = tokenNormalizado.replace("Const_", "");
                 if (reglas.containsKey(tokenBase)) {
@@ -297,9 +420,17 @@ public class Parser {
                 if (partes.length > 0 && reglas.containsKey(partes[0])) {
                     return reglas.get(partes[0]);
                 }
+
+                if (nombreToken != null && reglas.containsKey(nombreToken)) {
+                    return reglas.get(nombreToken);
+                }
             }
         }
         return null;
+    }
+
+    private String codigoAToken(String codigo) {
+        return CODIGO_A_TOKEN.get(codigo);
     }
 
     private String normalizarSimboloProduccion(String simbolo) {

@@ -49,23 +49,19 @@ public class PruebaParser {
 
     private static List<Parser.Token> crearTokensElseIf() {
         List<Parser.Token> tokens = new ArrayList<>();
-        // var x[5]; - Producción 79
-        tokens.add(new Parser.Token("var", "var", 1));
-        tokens.add(new Parser.Token("id", "x", 1));
-        tokens.add(new Parser.Token("[", "[", 1));
-        tokens.add(new Parser.Token("Const_Decimal", "5", 1));
-        tokens.add(new Parser.Token("ent", "ent", 1));
-        tokens.add(new Parser.Token("]", "]", 1));
-        tokens.add(new Parser.Token(";", ";", 1));
-        // var y[3]; - Producción 79 (segundo PROGRAMA)
-        tokens.add(new Parser.Token("var", "var", 2));
-        tokens.add(new Parser.Token("id", "y", 2));
-        tokens.add(new Parser.Token("[", "[", 2));
-        tokens.add(new Parser.Token("Const_Decimal", "3", 2));
-        tokens.add(new Parser.Token("ent", "ent", 2));
-        tokens.add(new Parser.Token("]", "]", 2));
-        tokens.add(new Parser.Token(";", ";", 2));
-        tokens.add(new Parser.Token("$", "$", 2));
+        // var x[5]; main () {} - Producción 79
+        tokens.add(new Parser.Token("-83", "var", 1));
+        tokens.add(new Parser.Token("-70", "x", 1));
+        tokens.add(new Parser.Token("-49", "[", 1));
+        tokens.add(new Parser.Token("-55", "5", 1));
+        tokens.add(new Parser.Token("-50", "]", 1));
+        tokens.add(new Parser.Token("-45", ";", 1));
+        tokens.add(new Parser.Token("-110", "main", 1));
+        tokens.add(new Parser.Token("-51", "(", 1));
+        tokens.add(new Parser.Token("-52", ")", 1));
+        tokens.add(new Parser.Token("-47", "{", 1));
+        tokens.add(new Parser.Token("-48", "}", 1));
+
         return tokens;
     }
 }

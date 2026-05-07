@@ -3,11 +3,11 @@ Codigo,No_Terminal,Produccion
 2,A1,coma id A1
 3,A1,EPSILON
 4,CONST_NUMERICA,Binario
-5,CONST_NUMERICA,Const Decimal
-6,CONST_NUMERICA,Const Octal
-7,CONST_NUMERICA,Const Hexadecimal
-8,CONSTANTE_S_SIGNO,Const real
-9,CONSTANTE_S_SIGNO,Const cadena
+5,CONST_NUMERICA,Const_Decimal
+6,CONST_NUMERICA,Const_Octal
+7,CONST_NUMERICA,Const_Hexadecimal
+8,CONSTANTE_S_SIGNO,Const_real
+9,CONSTANTE_S_SIGNO,Const_cadena
 10,CONSTANTE_S_SIGNO,CONST_NUMÉRICA
 11,CONSTANTE_S_SIGNO,true
 12,CONSTANTE_S_SIGNO,false
@@ -77,7 +77,7 @@ Codigo,No_Terminal,Produccion
 76,ASIG,/=
 77,ASIG,*=
 78,PROGRAMA,reg id { id J1 } PROGRAMA
-79,PROGRAMA,var J2 id [ Const ent J3 ] J4 J5
+79,PROGRAMA,var J2 id [ Const_Decimal J3 ] J4 J5
 80,PROGRAMA,def id LISTA_DE_PARAMETROS PROGRAMA ; PROGRAMA
 81,PROGRAMA,id = DECLARACION_CONSTANTES J6 ; PROGRAMA
 82,PROGRAMA,main ( ) { STATU K3 }
@@ -85,11 +85,11 @@ Codigo,No_Terminal,Produccion
 84,J1,EPSILON
 85,J2,reg id
 86,J2,EPSILON
-87,J3,coma Const ent J3
+87,J3,coma Const_Decimal J3
 88,J3,EPSILON
-89,J4,[ Const ent J3 ]
+89,J4,[ Const_Decimal J3 ]
 90,J4,EPSILON
-91,J5,J2 id [ Const ent J3 ] J4 J5
+91,J5,J2 id [ Const_Decimal J3 ] J4 J5
 92,J5,; PROGRAMA
 93,J6,coma id DECLARACION_CONSTANTES J6
 94,J6,EPSILON

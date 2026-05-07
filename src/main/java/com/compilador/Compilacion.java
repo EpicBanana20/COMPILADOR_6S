@@ -27,7 +27,7 @@ public class Compilacion {
             // Funciones integradas
             "CLEAR", "SQRT", "POW", "SQRTV", "STRLEN", "sin", "cos", "tan", "chr", "pred", "succ", "inc", "dec", "sqr", "copy", "val", "str",
             // Extra (mantener algunas)
-            "console.log", "true", "false", "null", "continue", "class"
+            "console.log", "true", "false", "null", "continue", "class", "main"
         };
         int tokenActual = -71;
         for (String palabra : palabras) {
