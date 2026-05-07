@@ -459,7 +459,9 @@ public class Parser {
         if (simbolo.equals("Binario")) return "Binario";
         if (simbolo.equals("Octal")) return "Const_Octal";
         if (simbolo.equals("Hexadecimal")) return "Const_Hexadecimal";
-        
+
+        if (simbolo.equals(",")) return "coma";
+
         if (simbolo.equals("true")) return "true";
         if (simbolo.equals("false")) return "false";
         
