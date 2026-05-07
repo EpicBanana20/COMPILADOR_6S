@@ -217,9 +217,58 @@ public class LecturaMatriz {
                     List<String> simbolos = new ArrayList<>();
                     if (!rhs.equals("EPSILON")) {
                         String[] partes = rhs.split(" ");
+                        List<String> partesLimpias = new ArrayList<>();
                         for (String parte : partes) {
                             if (!parte.trim().isEmpty()) {
-                                simbolos.add(parte.trim());
+                                partesLimpias.add(parte.trim());
+                            }
+                        }
+                        for (int i = 0; i < partesLimpias.size(); i++) {
+                            String actual = partesLimpias.get(i);
+                            if (i + 1 < partesLimpias.size()) {
+                                String siguiente = partesLimpias.get(i + 1);
+                                if ((actual.equals("Const") && (siguiente.equals("Decimal") || siguiente.equals("real") || siguiente.equals("cadena") || siguiente.equals("Exponencial"))) ||
+                                    (actual.equals("Const") && siguiente.equals("Octal")) ||
+                                    (actual.equals("Const") && siguiente.equals("Hexadecimal")) ||
+                                    (actual.equals("CONST") && siguiente.equals("NUMÉRICA"))) {
+                                    String combinado = actual + "_" + siguiente;
+                                    if (actual.equals("CONST")) combinado = "CONST_NUMERICA";
+                                    simbolos.add(combinado);
+                                    i++;
+                                    continue;
+                                }
+                                // COMENTADO: Ya no combinamos (OR) - ahora separado por espacios
+                                // if (actual.equals("(") && (siguiente.equals("OR") || siguiente.equals("id") || siguiente.equals("("))) {
+                                //     int j = i + 1;
+                                //     StringBuilder combinado = new StringBuilder("(");
+                                //     while (j < partesLimpias.size() && !partesLimpias.get(j).equals(")")) {
+                                //         if (combinado.length() > 1) combinado.append("_");
+                                //         combinado.append(partesLimpias.get(j));
+                                //         j++;
+                                //     }
+                                //     if (j < partesLimpias.size() && partesLimpias.get(j).equals(")")) {
+                                //         combinado.append(")");
+                                //         simbolos.add(combinado.toString());
+                                //         i = j;
+                                //         continue;
+                                //     }
+                                // }
+                            }
+                            String simboloProcesado = actual.replace("Á", "A").replace("É", "E").replace("Í", "I")
+                                           .replace("Ó", "O").replace("Ú", "U").replace("á", "a")
+                                           .replace("é", "e").replace("í", "i").replace("ó", "o")
+                                           .replace("ú", "u").replace("TÉRMINO", "TERMINO")
+                                           .replace("CONST_NUMÉRICA", "CONST_NUMERICA");
+                            
+                            if (simboloProcesado.length() > 1 && (simboloProcesado.endsWith("]") || simboloProcesado.endsWith(")"))) {
+                                String base = simboloProcesado.substring(0, simboloProcesado.length() - 1);
+                                String cierre = simboloProcesado.substring(simboloProcesado.length() - 1);
+                                if (!base.isEmpty()) {
+                                    simbolos.add(base);
+                                }
+                                simbolos.add(cierre);
+                            } else {
+                                simbolos.add(simboloProcesado);
                             }
                         }
                     }

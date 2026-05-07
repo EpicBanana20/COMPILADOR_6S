@@ -1,8 +1,9 @@
 package com.compilador;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -11,6 +12,7 @@ public class Compilacion {
 
     private CompiladorGUI gui;
     private LecturaMatriz lectorMatriz;
+    private List<Parser.Token> tokensAnalizados;
 
     private static final Map<String, String> PALABRAS_RESERVADAS = new LinkedHashMap<>();
 
@@ -33,6 +35,11 @@ public class Compilacion {
     public Compilacion(CompiladorGUI gui, LecturaMatriz lectorMatriz) {
         this.gui = gui;
         this.lectorMatriz = lectorMatriz;
+        this.tokensAnalizados = new ArrayList<>();
+    }
+
+    public List<Parser.Token> getTokensAnalizados() {
+        return tokensAnalizados;
     }
 
     public void ejecutar() {
@@ -40,6 +47,7 @@ public class Compilacion {
         gui.getModeloTokens().setRowCount(0);
         gui.getModeloErrores().setRowCount(0);
         gui.getModeloPila().setRowCount(0);
+        tokensAnalizados.clear();
 
         String codigoFuente = gui.getEditorCodigo().getText();
         Map<String, Map<String, String>> matriz = lectorMatriz.getMatriz();
@@ -153,6 +161,7 @@ public class Compilacion {
 
                 if (!tokenEncontrado.equals("-11") && !tokenEncontrado.equals("-12")) {
                     gui.getModeloTokens().addRow(new Object[] { tokenEncontrado, palabraFormada, lineaRegistro });
+                    tokensAnalizados.add(new Parser.Token(tokenEncontrado, palabraFormada, lineaRegistro));
                 }
                 
                 registrarConteo(contadores, familia); 
@@ -208,6 +217,7 @@ public class Compilacion {
 
                 if (!tokenEncontrado.equals("-11") && !tokenEncontrado.equals("-12")) {
                     gui.getModeloTokens().addRow(new Object[] { tokenEncontrado, palabraFormada, lineaRegistro });
+                    tokensAnalizados.add(new Parser.Token(tokenEncontrado, palabraFormada, lineaRegistro));
                 }
                 
                 registrarConteo(contadores, familia);

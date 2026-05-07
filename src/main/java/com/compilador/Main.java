@@ -42,9 +42,13 @@ public class Main {
             AbrirArchivo logicaAbrir = new AbrirArchivo(ventana);
             ventana.getBtnAbrir().addActionListener(e -> logicaAbrir.ejecutar());
 
-            // COMPILACIÓN
+            // COMPILACIÓN (Léxico + Sintaxis)
             Compilacion logicaCompilar = new Compilacion(ventana, lectorMatriz);
-            ventana.getBtnCompilar().addActionListener(e -> logicaCompilar.ejecutar());
+            Parser parser = new Parser(lectorMatriz);
+            ventana.getBtnCompilar().addActionListener(e -> {
+                logicaCompilar.ejecutar();
+                parser.ejecutar(logicaCompilar.getTokensAnalizados());
+            });
 
             // CREACIÓN DEL EXCEL
             CrearXLS logicaExcel = new CrearXLS(ventana);
