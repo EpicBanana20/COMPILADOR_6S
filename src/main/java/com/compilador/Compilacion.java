@@ -59,7 +59,7 @@ public class Compilacion {
         if (codigoFuente.isEmpty())
             return;
         if (matriz == null || matriz.isEmpty()) {
-            System.err.println("❌ Error: La matriz no está cargada.");
+            System.err.println(" Error: La matriz no está cargada.");
             return;
         }
 
@@ -366,6 +366,7 @@ public class Compilacion {
             case "-68": return "Exponencial Identificador";
             case "-69": return "Booleana Identificador";
             case "-70": return "Palabras Reservadas";
+            case "-111": return "Operadores matematicos";
 
             default: 
                 return "Agrupación Desconocida (" + estadoFinal + ")";

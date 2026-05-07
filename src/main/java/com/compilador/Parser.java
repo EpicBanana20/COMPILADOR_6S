@@ -131,6 +131,7 @@ public class Parser {
         CODIGO_A_TOKEN.put("-108", "continue");
         CODIGO_A_TOKEN.put("-109", "class");
         CODIGO_A_TOKEN.put("-110", "main");
+        CODIGO_A_TOKEN.put("-111", "#");
     }
 
     public static class Token {
