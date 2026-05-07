@@ -81,14 +81,14 @@ public class Parser {
         CODIGO_A_TOKEN.put("-59", "Binario");
         CODIGO_A_TOKEN.put("-60", "Const_Octal");
         CODIGO_A_TOKEN.put("-61", "Const_Hexadecimal");
-        CODIGO_A_TOKEN.put("-62", "Cadena Identificador");
-        CODIGO_A_TOKEN.put("-63", "Binario Identificador");
-        CODIGO_A_TOKEN.put("-64", "Decimal Identificador");
-        CODIGO_A_TOKEN.put("-65", "Octal Identificador");
-        CODIGO_A_TOKEN.put("-66", "Hexadecimal Identificador");
-        CODIGO_A_TOKEN.put("-67", "Real Identificador");
-        CODIGO_A_TOKEN.put("-68", "Exponencial Identificador");
-        CODIGO_A_TOKEN.put("-69", "Booleana Identificador");
+        CODIGO_A_TOKEN.put("-62", "id"); // Cadena Identificador
+        CODIGO_A_TOKEN.put("-63", "id"); // Binario Identificador
+        CODIGO_A_TOKEN.put("-64", "id"); // Decimal Identificador
+        CODIGO_A_TOKEN.put("-65", "id"); // Octal Identificador
+        CODIGO_A_TOKEN.put("-66", "id"); // Hexadecimal Identificador
+        CODIGO_A_TOKEN.put("-67", "id"); // Real Identificador
+        CODIGO_A_TOKEN.put("-68", "id"); // Exponencial Identificador
+        CODIGO_A_TOKEN.put("-69", "id"); // Booleana Identificador
         CODIGO_A_TOKEN.put("-70", "id");
 
         CODIGO_A_TOKEN.put("-71", "if");
