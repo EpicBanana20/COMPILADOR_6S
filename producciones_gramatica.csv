@@ -87,7 +87,7 @@ Codigo,No_Terminal,Produccion
 86,J2,EPSILON
 87,J3,coma Const_Decimal J3
 88,J3,EPSILON
-89,J4,[ Const_Decimal J3 ]
+89,J4,[ Const_Decimal J3 ] J4
 90,J4,EPSILON
 91,J5,coma J2 id [ Const_Decimal J3 ] J4 J5
 92,J5,; PROGRAMA

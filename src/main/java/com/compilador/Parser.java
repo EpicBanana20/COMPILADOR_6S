@@ -132,6 +132,7 @@ public class Parser {
         CODIGO_A_TOKEN.put("-109", "class");
         CODIGO_A_TOKEN.put("-110", "main");
         CODIGO_A_TOKEN.put("-111", "#");
+        CODIGO_A_TOKEN.put("-112", "concat");
     }
 
     public static class Token {
