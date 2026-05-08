@@ -514,19 +514,25 @@ public class Parser {
         if (token.equals("id")) {
             return "id";
         }
-        
+
         if (token.equals("true") || token.equals("false")) {
             return token;
         }
-        
+
         if (token.equals("null")) {
             return token;
         }
-        
+
         if (token.equals(",")) {
             return "coma";
         }
-        
+
+        // El autómata emite -53 (comilla doble) o -54 (comilla simple) para cadenas completas.
+        // La gramática solo conoce Const_cadena, no el símbolo literal de comilla.
+        if (token.equals("\"") || token.equals("'")) {
+            return "Const_cadena";
+        }
+
         if (token.equals("-55")) {
             return "Const_Decimal";
         }
