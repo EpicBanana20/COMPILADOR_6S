@@ -131,22 +131,10 @@ public class LecturaMatriz {
                     String token = encabezados[i].trim();
                     String valorCelda = (i < valores.length) ? valores[i].trim() : "";
 
-                    if (!valorCelda.isEmpty() && !valorCelda.equals("518") && !valorCelda.equals("519") 
-                        && !valorCelda.equals("544") && !valorCelda.equals("512") && !valorCelda.equals("513")
-                        && !valorCelda.equals("514") && !valorCelda.equals("515") && !valorCelda.equals("516")
-                        && !valorCelda.equals("517") && !valorCelda.equals("520") && !valorCelda.equals("521")
-                        && !valorCelda.equals("522") && !valorCelda.equals("523") && !valorCelda.equals("524")
-                        && !valorCelda.equals("525") && !valorCelda.equals("526") && !valorCelda.equals("527")
-                        && !valorCelda.equals("528") && !valorCelda.equals("529") && !valorCelda.equals("530")
-                        && !valorCelda.equals("531") && !valorCelda.equals("532") && !valorCelda.equals("533")
-                        && !valorCelda.equals("534") && !valorCelda.equals("535") && !valorCelda.equals("536")
-                        && !valorCelda.equals("537") && !valorCelda.equals("538") && !valorCelda.equals("539")
-                        && !valorCelda.equals("540") && !valorCelda.equals("541") && !valorCelda.equals("542")
-                        && !valorCelda.equals("543")) {
+                    if (!valorCelda.isEmpty()) {
                         try {
                             reglas.put(token, Integer.parseInt(valorCelda));
                         } catch (NumberFormatException e) {
-                            // Ignorar valores no numéricos
                         }
                     }
                 }

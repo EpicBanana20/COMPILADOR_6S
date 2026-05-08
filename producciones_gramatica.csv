@@ -89,9 +89,9 @@ Codigo,No_Terminal,Produccion
 88,J3,EPSILON
 89,J4,[ Const_Decimal J3 ]
 90,J4,EPSILON
-91,J5,J2 id [ Const_Decimal J3 ] J4 J5
+91,J5,coma J2 id [ Const_Decimal J3 ] J4 J5
 92,J5,; PROGRAMA
-93,J6,coma id DECLARACION_CONSTANTES J6
+93,J6,coma id = DECLARACION_CONSTANTES J6
 94,J6,EPSILON
 95,STATU,Console.read ( OR K1 )
 96,STATU,Console.log ( OR )
@@ -99,8 +99,8 @@ Codigo,No_Terminal,Produccion
 98,STATU,OR
 99,STATU,{ STATU K3 }
 100,STATU,while ( OR ) STATU
-101,STATU,do STATU while ( OR ) ;
-102,STATU,return OR ; 
+101,STATU,do STATU while ( OR )
+102,STATU,return OR 
 103,STATU,for ( OR K1 K4) STATU
 104,STATU,switch ( OR ) { case OR : STATU K3 break K5 }
 105,STATU,EPSILON

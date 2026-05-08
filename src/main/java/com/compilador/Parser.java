@@ -219,8 +219,27 @@ public class Parser {
                     if (esCodigoError(codigoProduccion)) {
                         String descripcion = obtenerDescripcionErrorSintactico(codigoProduccion);
                         int lineaError = (tokenActual != null) ? tokenActual.linea : 0;
+                        String lexemaMostrar = (tokenActual != null) ? tokenActual.lexema : simboloActual;
                         
-                        System.out.println(">>> ERROR SINTACTICO [" + codigoProduccion + "]: " + descripcion);
+                        System.out.println(">>> ERROR MANEJABLE [" + codigoProduccion + "]: " + descripcion);
+                        erroresSintacticos.add("Error " + codigoProduccion + " en línea " + lineaError + ": " + descripcion);
+                        if (gui != null) {
+                            gui.getModeloErrores().addRow(new Object[] { String.valueOf(codigoProduccion), descripcion, lexemaMostrar, "Sintáctico", String.valueOf(lineaError) });
+                        }
+                        analisisExitoso = false;
+                        if (tokenActual != null) {
+                            posicionActual++;
+                        } else {
+                            break;
+                        }
+                        continue;
+                    }
+                    
+                    if (codigoProduccion == 544) {
+                        String descripcion = obtenerDescripcionErrorSintactico(codigoProduccion);
+                        int lineaError = (tokenActual != null) ? tokenActual.linea : 0;
+                        
+                        System.out.println(">>> ERROR FIN ARCHIVO [" + codigoProduccion + "]: " + descripcion);
                         erroresSintacticos.add("Error " + codigoProduccion + " en línea " + lineaError + ": " + descripcion);
                         if (gui != null) {
                             gui.getModeloErrores().addRow(new Object[] { String.valueOf(codigoProduccion), descripcion, simboloActual, "Sintáctico", String.valueOf(lineaError) });
@@ -347,7 +366,7 @@ public class Parser {
     }
 
     private boolean esCodigoError(int codigo) {
-        return codigo >= 512 && codigo <= 544;
+        return codigo >= 512 && codigo <= 543;
     }
 
     private String obtenerDescripcionErrorSintactico(int codigoError) {
@@ -394,39 +413,58 @@ public class Parser {
         String noTerminalNormalizado = normalizarNoTerminal(noTerminal);
         Map<String, Integer> reglas = matrizParser.get(noTerminalNormalizado);
 
+        System.out.println("[DEBUG] obtenerCodigoProduccion: NT=" + noTerminalNormalizado + " T=" + token + " reglas=" + (reglas != null ? reglas.keySet() : "null"));
+
         if (reglas != null) {
             if (reglas.containsKey(token)) {
-                return reglas.get(token);
+                Integer resultado = reglas.get(token);
+                System.out.println("[DEBUG]Encontrado directo: token=" + token + " -> codigo=" + resultado);
+                return resultado;
             }
 
             String tokenNormalizado = normalizarToken(token);
+            System.out.println("[DEBUG] tokenNormalizado=" + tokenNormalizado);
             if (reglas.containsKey(tokenNormalizado)) {
-                return reglas.get(tokenNormalizado);
+                Integer resultado = reglas.get(tokenNormalizado);
+                System.out.println("[DEBUG]Encontrado tokenNormalizado: " + tokenNormalizado + " -> codigo=" + resultado);
+                return resultado;
             }
 
             String nombreToken = codigoAToken(token);
+            System.out.println("[DEBUG]nombreToken=" + nombreToken);
             if (nombreToken != null && reglas.containsKey(nombreToken)) {
-                return reglas.get(nombreToken);
+                Integer resultado = reglas.get(nombreToken);
+                System.out.println("[DEBUG]Encontrado nombreToken: " + nombreToken + " -> codigo=" + resultado);
+                return resultado;
             }
 
             if (tokenNormalizado.startsWith("Const_")) {
                 String tokenBase = tokenNormalizado.replace("Const_", "");
+                System.out.println("[DEBUG]tokenBase=" + tokenBase);
                 if (reglas.containsKey(tokenBase)) {
-                    return reglas.get(tokenBase);
+                    Integer resultado = reglas.get(tokenBase);
+                    System.out.println("[DEBUG]Encontrado tokenBase: " + tokenBase + " -> codigo=" + resultado);
+                    return resultado;
                 }
             }
 
             if (token.startsWith("-")) {
                 String[] partes = token.split("_");
+                System.out.println("[DEBUG]partes=" + java.util.Arrays.toString(partes));
                 if (partes.length > 0 && reglas.containsKey(partes[0])) {
-                    return reglas.get(partes[0]);
+                    Integer resultado = reglas.get(partes[0]);
+                    System.out.println("[DEBUG]Encontrado partes[0]: " + partes[0] + " -> codigo=" + resultado);
+                    return resultado;
                 }
 
                 if (nombreToken != null && reglas.containsKey(nombreToken)) {
-                    return reglas.get(nombreToken);
+                    Integer resultado = reglas.get(nombreToken);
+                    System.out.println("[DEBUG]Encontrado nombreToken(2): " + nombreToken + " -> codigo=" + resultado);
+                    return resultado;
                 }
             }
         }
+        System.out.println("[DEBUG] NO se encontró producción para " + noTerminalNormalizado + " con token " + token);
         return null;
     }
 
