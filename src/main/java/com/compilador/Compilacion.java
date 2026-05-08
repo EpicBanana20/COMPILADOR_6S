@@ -34,6 +34,8 @@ public class Compilacion {
             PALABRAS_RESERVADAS.put(palabra, String.valueOf(tokenActual));
             tokenActual--;
         }
+        // El loop asigna -111 a concat, pero CODIGO_A_TOKEN reserva -111 para "#" y -112 para "concat"
+        PALABRAS_RESERVADAS.put("concat", "-112");
     }
 
     public Compilacion(CompiladorGUI gui, LecturaMatriz lectorMatriz) {
