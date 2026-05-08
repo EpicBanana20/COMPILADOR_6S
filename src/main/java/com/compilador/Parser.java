@@ -179,9 +179,8 @@ public class Parser {
 
         boolean analisisExitoso = true;
         int pasos = 0;
-        int maxPasos = 1000;
 
-        while (!pila.isEmpty() && pasos < maxPasos) {
+        while (!pila.isEmpty()) {
             pasos++;
             String cimaPila = pila.peek();
             Token tokenActual = (posicionActual < tokens.size()) ? tokens.get(posicionActual) : null;
@@ -303,11 +302,6 @@ public class Parser {
                     break;
                 }
             }
-        }
-
-        if (pasos >= maxPasos) {
-            System.out.println(">>> ERROR: Límite de pasos alcanzado");
-            erroresSintacticos.add("Error: Límite de pasos del parser alcanzado");
         }
 
         System.out.println("\n========== RESULTADO DEL ANALISIS SINTACTICO ==========");
