@@ -32,12 +32,6 @@ public class Main {
             System.out.println("No terminales: " + lectorMatriz.getMatrizParser().size());
             System.out.println("Producciones: " + lectorMatriz.getProducciones().size());
             
-            // Mostrar ejemplo de producciones
-            System.out.println("\n--- Ejemplo de producciones ---");
-            System.out.println("Prod 1: " + lectorMatriz.getProduccion(1));
-            System.out.println("Prod 78: " + lectorMatriz.getProduccion(78));
-            System.out.println("Prod 82: " + lectorMatriz.getProduccion(82));
-            
             // ABRIR ARCHIVO
             AbrirArchivo logicaAbrir = new AbrirArchivo(ventana);
             ventana.getBtnAbrir().addActionListener(e -> logicaAbrir.ejecutar());

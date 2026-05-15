@@ -168,14 +168,8 @@ public class Parser {
         this.erroresSintacticos = new ArrayList<>();
         this.contadoresDiagramasPrincipales = new java.util.LinkedHashMap<>();
 
-        System.out.println("\n========== INICIO DEL ANALISIS SINTACTICO ==========");
-        System.out.println("Total de tokens recibidos: " + tokens.size());
-
         pila.push("$");
         pila.push("PROGRAMA");
-
-        System.out.println("\n--- Pila Inicial ---");
-        System.out.println(pila);
 
         boolean analisisExitoso = true;
         int pasos = 0;
@@ -189,20 +183,10 @@ public class Parser {
             String simboloActualNormalizado = simboloActual.startsWith("-") ? codigoAToken(simboloActual) : simboloActual;
             if (simboloActualNormalizado == null) simboloActualNormalizado = simboloActual;
 
-            System.out.println("\n--- Paso " + pasos + " ---");
-            List<String> pilaNormalizada = new ArrayList<>();
-            for (String s : pila) {
-                pilaNormalizada.add(normalizarNoTerminal(s));
-            }
-            System.out.println("Pila: " + pilaNormalizada);
-            System.out.println("Token actual: " + (tokenActual != null ? simboloActualNormalizado + "('" + tokenActual.lexema + "')" : "FIN DE ENTRADA"));
-
             if (cimaPila.equals("$")) {
                 if (simboloActual.equals("$")) {
-                    System.out.println(">>> ACCEPT: Análisis completado exitosamente!");
                     break;
                 } else {
-                    System.out.println(">>> ERROR: Se esperaba EOF pero se encontró: " + simboloActual);
                     erroresSintacticos.add("Error en línea " + (tokenActual != null ? tokenActual.linea : 0) + ": Se esperaba FIN DE ARCHIVO");
                     if (gui != null) {
                         gui.getModeloErrores().addRow(new Object[] { "SYNTAX", "Se esperaba FIN DE ARCHIVO", "$", "Sintáctico", String.valueOf(tokenActual != null ? tokenActual.linea : 0) });
@@ -221,7 +205,6 @@ public class Parser {
                         int lineaError = (tokenActual != null) ? tokenActual.linea : 0;
                         String lexemaMostrar = (tokenActual != null) ? tokenActual.lexema : simboloActual;
                         
-                        System.out.println(">>> ERROR MANEJABLE [" + codigoProduccion + "]: " + descripcion);
                         erroresSintacticos.add("Error " + codigoProduccion + " en línea " + lineaError + ": " + descripcion);
                         if (gui != null) {
                             gui.getModeloErrores().addRow(new Object[] { String.valueOf(codigoProduccion), descripcion, lexemaMostrar, "Sintáctico", String.valueOf(lineaError) });
@@ -239,7 +222,6 @@ public class Parser {
                         String descripcion = obtenerDescripcionErrorSintactico(codigoProduccion);
                         int lineaError = (tokenActual != null) ? tokenActual.linea : 0;
                         
-                        System.out.println(">>> ERROR FIN ARCHIVO [" + codigoProduccion + "]: " + descripcion);
                         erroresSintacticos.add("Error " + codigoProduccion + " en línea " + lineaError + ": " + descripcion);
                         if (gui != null) {
                             gui.getModeloErrores().addRow(new Object[] { String.valueOf(codigoProduccion), descripcion, simboloActual, "Sintáctico", String.valueOf(lineaError) });
@@ -257,9 +239,6 @@ public class Parser {
                             contadoresDiagramasPrincipales.getOrDefault(noTerminalNormalizado, 0) + 1);
                     }
 
-                    System.out.println("Aplicando producción " + codigoProduccion + ": " + noTerminalNormalizado + " -> " + 
-                        (produccion.isEmpty() ? "EPSILON" : produccion));
-
                     if (!produccion.isEmpty()) {
                         for (int i = produccion.size() - 1; i >= 0; i--) {
                             if (!produccion.get(i).equals("EPSILON")) {
@@ -270,7 +249,6 @@ public class Parser {
                     }
                 } else {
                     String cimaNorm = normalizarNoTerminal(cimaPila);
-                    System.out.println(">>> ERROR: No hay producción para " + cimaNorm + " con token " + simboloActualNormalizado);
                     erroresSintacticos.add("Error en línea " + (tokenActual != null ? tokenActual.linea : 0) +
                         ": No se esperaba '" + simboloActualNormalizado + "' después de '" + cimaNorm + "'");
                     if (gui != null) {
@@ -286,37 +264,18 @@ public class Parser {
                 boolean coinciden = cimaNormalizada.equals(tokenNormalizado);
 
                 if (coinciden) {
-                    String cimaNorm = normalizarNoTerminal(cimaPila);
-                    System.out.println(">>> MATCH: " + cimaNorm + " coincide con " + simboloActualNormalizado);
                     pila.pop();
                     posicionActual++;
                 } else {
                     String cimaNorm = normalizarNoTerminal(cimaPila);
-                    System.out.println(">>> ERROR: Se esperaba '" + cimaNorm + "' pero se encontró '" + simboloActualNormalizado + "'");
                     erroresSintacticos.add("Error en línea " + (tokenActual != null ? tokenActual.linea : 0) +
                         ": Se esperaba '" + cimaNorm + "' pero se encontró '" + simboloActualNormalizado + "'");
                     if (gui != null) {
-                        gui.getModeloErrores().addRow(new Object[] { "SYNTAX", "Se esperaba '" + cimaNorm + "' pero se encontró '" + simboloActualNormalizado + "'", tokenActual != null ? tokenActual.lexema : simboloActual, "Sintáctico", String.valueOf(tokenActual != null ? tokenActual.linea : 0) });
+                        gui.getModeloErrores().addRow(new Object[] { "SYNTAX", "Se esperaba '" + cimaNorm + "' pero se encontré '" + simboloActualNormalizado + "'", tokenActual != null ? tokenActual.lexema : simboloActual, "Sintáctico", String.valueOf(tokenActual != null ? tokenActual.linea : 0) });
                     }
                     analisisExitoso = false;
                     break;
                 }
-            }
-        }
-
-        System.out.println("\n========== RESULTADO DEL ANALISIS SINTACTICO ==========");
-        if (analisisExitoso) {
-            System.out.println(">>> EL ANALISIS SINTACTICO FUE EXITOSO <<<");
-        } else {
-            System.out.println(">>> SE ENCONTRARON ERRORES SINTACTICOS <<<");
-        }
-        System.out.println("Total de pasos: " + pasos);
-        System.out.println("Tokens procesados: " + posicionActual + " de " + tokens.size());
-
-        if (!erroresSintacticos.isEmpty()) {
-            System.out.println("\n--- Errores Sintácticos ---");
-            for (String error : erroresSintacticos) {
-                System.out.println("  - " + error);
             }
         }
     }
@@ -408,58 +367,39 @@ public class Parser {
         String noTerminalNormalizado = normalizarNoTerminal(noTerminal);
         Map<String, Integer> reglas = matrizParser.get(noTerminalNormalizado);
 
-        System.out.println("[DEBUG] obtenerCodigoProduccion: NT=" + noTerminalNormalizado + " T=" + token + " reglas=" + (reglas != null ? reglas.keySet() : "null"));
-
         if (reglas != null) {
             if (reglas.containsKey(token)) {
-                Integer resultado = reglas.get(token);
-                System.out.println("[DEBUG]Encontrado directo: token=" + token + " -> codigo=" + resultado);
-                return resultado;
+                return reglas.get(token);
             }
 
             String tokenNormalizado = normalizarToken(token);
-            System.out.println("[DEBUG] tokenNormalizado=" + tokenNormalizado);
             if (reglas.containsKey(tokenNormalizado)) {
-                Integer resultado = reglas.get(tokenNormalizado);
-                System.out.println("[DEBUG]Encontrado tokenNormalizado: " + tokenNormalizado + " -> codigo=" + resultado);
-                return resultado;
+                return reglas.get(tokenNormalizado);
             }
 
             String nombreToken = codigoAToken(token);
-            System.out.println("[DEBUG]nombreToken=" + nombreToken);
             if (nombreToken != null && reglas.containsKey(nombreToken)) {
-                Integer resultado = reglas.get(nombreToken);
-                System.out.println("[DEBUG]Encontrado nombreToken: " + nombreToken + " -> codigo=" + resultado);
-                return resultado;
+                return reglas.get(nombreToken);
             }
 
             if (tokenNormalizado.startsWith("Const_")) {
                 String tokenBase = tokenNormalizado.replace("Const_", "");
-                System.out.println("[DEBUG]tokenBase=" + tokenBase);
                 if (reglas.containsKey(tokenBase)) {
-                    Integer resultado = reglas.get(tokenBase);
-                    System.out.println("[DEBUG]Encontrado tokenBase: " + tokenBase + " -> codigo=" + resultado);
-                    return resultado;
+                    return reglas.get(tokenBase);
                 }
             }
 
             if (token.startsWith("-")) {
                 String[] partes = token.split("_");
-                System.out.println("[DEBUG]partes=" + java.util.Arrays.toString(partes));
                 if (partes.length > 0 && reglas.containsKey(partes[0])) {
-                    Integer resultado = reglas.get(partes[0]);
-                    System.out.println("[DEBUG]Encontrado partes[0]: " + partes[0] + " -> codigo=" + resultado);
-                    return resultado;
+                    return reglas.get(partes[0]);
                 }
 
                 if (nombreToken != null && reglas.containsKey(nombreToken)) {
-                    Integer resultado = reglas.get(nombreToken);
-                    System.out.println("[DEBUG]Encontrado nombreToken(2): " + nombreToken + " -> codigo=" + resultado);
-                    return resultado;
+                    return reglas.get(nombreToken);
                 }
             }
         }
-        System.out.println("[DEBUG] NO se encontró producción para " + noTerminalNormalizado + " con token " + token);
         return null;
     }
 

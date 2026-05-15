@@ -32,7 +32,7 @@ public class CrearXLS {
 
     public void ejecutar() {
         FileDialog dialogo = new FileDialog((Frame) null, "Guardar reporte Léxico en Excel", FileDialog.SAVE);
-        dialogo.setFile("ReporteLexico.xlsx"); 
+        dialogo.setFile("Reporte_MezaAlex.xlsx"); 
         dialogo.setVisible(true);
 
         String dir = dialogo.getDirectory();
