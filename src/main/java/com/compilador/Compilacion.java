@@ -186,55 +186,6 @@ public class Compilacion {
             }
 
             estadoActual = siguienteEstado;
-
-
-            if (estadoActual.startsWith("-")) {
-                String tokenEncontrado = estadoActual;
-                String palabraFormada = lexemaActual.toString().trim();
-                String familia = obtenerAgrupacion(tokenEncontrado);
-
-                if (tokenEncontrado.equals("-70")) {
-                    if (PALABRAS_RESERVADAS.containsKey(palabraFormada)) {
-                        tokenEncontrado = PALABRAS_RESERVADAS.get(palabraFormada);
-                        
-                        if (palabraFormada.equals("true") || palabraFormada.equals("false")) {
-                            familia = "Constantes Booleanas";
-                        } else if (palabraFormada.equals("null")) {
-                            familia = "Constante nula";
-                        } else {
-                            familia = "Palabras Reservadas";
-                        }
-                    } else {
-                        int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
-                        registrarError("500", "Palabra reservada no reconocida", palabraFormada, lineaRegistro);
-                        registrarConteo(contadores, "Errores Léxicos");
-                        
-                        estadoActual = "0";
-                        lexemaActual.setLength(0);
-                        
-                        i--;
-                        if (c == '\n') lineaActual--;
-                        
-                        continue;
-                    }
-                }
-
-                int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
-
-                if (!tokenEncontrado.equals("-11") && !tokenEncontrado.equals("-12")) {
-                    gui.getModeloTokens().addRow(new Object[] { tokenEncontrado, palabraFormada, lineaRegistro });
-                    tokensAnalizados.add(new Parser.Token(tokenEncontrado, palabraFormada, lineaRegistro));
-                }
-                
-                registrarConteo(contadores, familia);
-
-                estadoActual = "0";
-                lexemaActual.setLength(0);
-
-                i--;
-                if (c == '\n')
-                    lineaActual--; 
-            }
         }
 
         List<String> ordenDeseado = Arrays.asList(

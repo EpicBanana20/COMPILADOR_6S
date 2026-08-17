@@ -271,7 +271,7 @@ public class Parser {
                     erroresSintacticos.add("Error en línea " + (tokenActual != null ? tokenActual.linea : 0) +
                         ": Se esperaba '" + cimaNorm + "' pero se encontró '" + simboloActualNormalizado + "'");
                     if (gui != null) {
-                        gui.getModeloErrores().addRow(new Object[] { "SYNTAX", "Se esperaba '" + cimaNorm + "' pero se encontré '" + simboloActualNormalizado + "'", tokenActual != null ? tokenActual.lexema : simboloActual, "Sintáctico", String.valueOf(tokenActual != null ? tokenActual.linea : 0) });
+                        gui.getModeloErrores().addRow(new Object[] { "SYNTAX", "Se esperaba '" + cimaNorm + "' pero se encontro '" + simboloActualNormalizado + "'", tokenActual != null ? tokenActual.lexema : simboloActual, "Sintáctico", String.valueOf(tokenActual != null ? tokenActual.linea : 0) });
                     }
                     analisisExitoso = false;
                     break;
