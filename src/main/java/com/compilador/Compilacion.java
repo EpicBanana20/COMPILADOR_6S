@@ -148,19 +148,9 @@ public class Compilacion {
                         } else {
                             familia = "Palabras Reservadas";
                         }
-                    } else {
-                        int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
-                        registrarError("500", "Palabra reservada no reconocida", palabraFormada, lineaRegistro);
-                        registrarConteo(contadores, "Errores Léxicos");
-                        
-                        estadoActual = "0";
-                        lexemaActual.setLength(0);
-                        
-                        i--;
-                        if (c == '\n') lineaActual--;
-                        
-                        continue;
                     }
+                    // Si no es palabra reservada: es un identificador de tipo Registro (default).
+                    // familia ya vale "Registro Identificador" y tokenEncontrado sigue en "-70" -> "id" para el parser.
                 }
 
                 int lineaRegistro = (c == '\n') ? lineaActual - 1 : lineaActual;
@@ -200,9 +190,9 @@ public class Compilacion {
             "Numerica Binario", "Numerica Decimal", "Numerica Octal", "Numerica Hexadecimal", 
             "Numerica Real", "Numerica Exponencial",
             "Constantes Booleanas", "Constante nula",
-            "Cadena Identificador", "Numerica Binario Identificador", 
-            "Numerica Decimal Identificador", "Numerica Octal Identificador", 
-            "Numerica Hexadecimal Identificador", "Real Identificador", 
+            "Registro Identificador", "Cadena Identificador", "Numerica Binario Identificador",
+            "Numerica Decimal Identificador", "Numerica Octal Identificador",
+            "Numerica Hexadecimal Identificador", "Real Identificador",
             "Exponencial Identificador", "Booleana Identificador"
         );
 
@@ -318,7 +308,7 @@ public class Compilacion {
             case "-67": return "Real Identificador";
             case "-68": return "Exponencial Identificador";
             case "-69": return "Booleana Identificador";
-            case "-70": return "Palabras Reservadas";
+            case "-70": return "Registro Identificador";
             case "-111": return "Operadores matematicos";
 
             default: 
