@@ -152,12 +152,13 @@ public class CrearXLS {
 
         // 2. CREAMOS LOS ENCABEZADOS DE LA FILA 0
         String[] titulosPrincipales = {
-            "Errores", "identificadores", "", "", "", "", "", "", "", "", 
+            "Errores", "identificadores", "", "", "", "", "", "", "", "",
+            "Comentarios",
             "palabras reservada", "Constantes", "", "", "", "", "", "", "", "",
-            "operadores de postfix", "Operadores lógicos binarios", "Operadores de control", 
-            "Operadores matemáticos", "Operador exponente", "Operadores de turno", 
-            "Operadores relacionales", "Operadores sin igualdad de conversión de tipo", 
-            "Operadores lógicos", "Operador ternario", "Operadores de Asignación", 
+            "operadores de postfix", "Operadores lógicos binarios", "Operadores de control",
+            "Operadores matemáticos", "Operador exponente", "Operadores de turno",
+            "Operadores relacionales", "Operadores sin igualdad de conversión de tipo",
+            "Operadores lógicos", "Operador ternario", "Operadores de Asignación",
             "Operadores de agrupamiento"
         };
         
@@ -169,9 +170,10 @@ public class CrearXLS {
 
         // 3. CREAMOS LAS SUBCATEGORÍAS DE LA FILA 1
         String[] subCategorias = {
-            "", "cadena", "Numérica Binario", "Numérica Decimal", "Numérica Octal", 
-            "Numérica hexadecimal", "Real", "Exponencial", "Booleanas", "comentarios", 
-            "", "cadena", "Numérica Binario", "Numérica Decimal", "Numérica Octal", 
+            "", "cadena", "Numérica Binario", "Numérica Decimal", "Numérica Octal",
+            "Numérica hexadecimal", "Real", "Exponencial", "Booleanas", "Registro",
+            "", "",
+            "cadena", "Numérica Binario", "Numérica Decimal", "Numérica Octal",
             "Numérica hexadecimal", "Real", "Exponencial", "Booleanas", "nula",
             "", "", "", "", "", "", "", "", "", "", "", ""
         };
@@ -185,16 +187,17 @@ public class CrearXLS {
         // 4. COMBINAMOS LAS CELDAS (FUSIONAR)
         sheet.addMergedRegion(new CellRangeAddress(0, 1, 0, 0));   // Errores (A1:A2)
         sheet.addMergedRegion(new CellRangeAddress(0, 0, 1, 9));   // Identificadores (B1:J1)
-        sheet.addMergedRegion(new CellRangeAddress(0, 1, 10, 10)); // Palabras reservada (K1:K2)
-        sheet.addMergedRegion(new CellRangeAddress(0, 0, 11, 19)); // Constantes (L1:T1)
-        
-        // Operadores (de la U a la AF se fusionan hacia abajo U1:U2, V1:V2, etc.)
-        for (int col = 20; col <= 31; col++) {
+        sheet.addMergedRegion(new CellRangeAddress(0, 1, 10, 10)); // Comentarios (K1:K2)
+        sheet.addMergedRegion(new CellRangeAddress(0, 1, 11, 11)); // Palabras reservada (L1:L2)
+        sheet.addMergedRegion(new CellRangeAddress(0, 0, 12, 20)); // Constantes (M1:U1)
+
+        // Operadores (de la V a la AG se fusionan hacia abajo V1:V2, W1:W2, etc.)
+        for (int col = 21; col <= 32; col++) {
             sheet.addMergedRegion(new CellRangeAddress(0, 1, col, col));
         }
 
         // 5. PREPARAMOS TODA LA FILA 2 CON CEROS POR DEFECTO
-        for (int i = 0; i <= 31; i++) {
+        for (int i = 0; i <= 32; i++) {
             Cell cell = row2.createCell(i);
             cell.setCellValue("0");
             cell.setCellStyle(estilo); // Aplicamos centrado para los números también
@@ -214,32 +217,34 @@ public class CrearXLS {
         mapaColumnas.put("Real Identificador", 6);
         mapaColumnas.put("Exponencial Identificador", 7);
         mapaColumnas.put("Booleana Identificador", 8);
-        mapaColumnas.put("Comentarios", 9); 
-        
-        mapaColumnas.put("Palabras Reservadas", 10);
-        
-        mapaColumnas.put("Cadena", 11);
-        mapaColumnas.put("Numerica Binario", 12);
-        mapaColumnas.put("Numerica Decimal", 13);
-        mapaColumnas.put("Numerica Octal", 14);
-        mapaColumnas.put("Numerica Hexadecimal", 15);
-        mapaColumnas.put("Numerica Real", 16);
-        mapaColumnas.put("Numerica Exponencial", 17);
-        mapaColumnas.put("Constantes Booleanas", 18);
-        mapaColumnas.put("Constante nula", 19);
-        
-        mapaColumnas.put("Operadores postfix", 20);
-        mapaColumnas.put("Operadores logicos binarios", 21);
-        mapaColumnas.put("Operador de control", 22);
-        mapaColumnas.put("Operadores matematicos", 23);
-        mapaColumnas.put("Operador exponente", 24);
-        mapaColumnas.put("Operadores de turno", 25);
-        mapaColumnas.put("Operadores relacionales", 26);
-        mapaColumnas.put("Operadores sin igualdad de conversion de tipo", 27);
-        mapaColumnas.put("Operadores logicos", 28);
-        mapaColumnas.put("Operador ternario", 29);
-        mapaColumnas.put("Operadores de asignacion", 30);
-        mapaColumnas.put("Operador de agrupamiento", 31);
+        mapaColumnas.put("Registro Identificador", 9);
+
+        mapaColumnas.put("Comentarios", 10);
+
+        mapaColumnas.put("Palabras Reservadas", 11);
+
+        mapaColumnas.put("Cadena", 12);
+        mapaColumnas.put("Numerica Binario", 13);
+        mapaColumnas.put("Numerica Decimal", 14);
+        mapaColumnas.put("Numerica Octal", 15);
+        mapaColumnas.put("Numerica Hexadecimal", 16);
+        mapaColumnas.put("Numerica Real", 17);
+        mapaColumnas.put("Numerica Exponencial", 18);
+        mapaColumnas.put("Constantes Booleanas", 19);
+        mapaColumnas.put("Constante nula", 20);
+
+        mapaColumnas.put("Operadores postfix", 21);
+        mapaColumnas.put("Operadores logicos binarios", 22);
+        mapaColumnas.put("Operador de control", 23);
+        mapaColumnas.put("Operadores matematicos", 24);
+        mapaColumnas.put("Operador exponente", 25);
+        mapaColumnas.put("Operadores de turno", 26);
+        mapaColumnas.put("Operadores relacionales", 27);
+        mapaColumnas.put("Operadores sin igualdad de conversion de tipo", 28);
+        mapaColumnas.put("Operadores logicos", 29);
+        mapaColumnas.put("Operador ternario", 30);
+        mapaColumnas.put("Operadores de asignacion", 31);
+        mapaColumnas.put("Operador de agrupamiento", 32);
 
         // 7. VACIAR LOS DATOS DE LA TABLA A SUS COLUMNAS CORRECTAS
         int totalErrores = 0;

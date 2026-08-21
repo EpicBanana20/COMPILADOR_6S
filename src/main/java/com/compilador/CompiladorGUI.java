@@ -254,9 +254,20 @@ public class CompiladorGUI extends JFrame {
             setFont(new Font("Consolas", Font.PLAIN, 14));
             setBorder(new EmptyBorder(10, 10, 10, 15)); 
             component.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-                @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { repaint(); }
-                @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { repaint(); }
-                @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { repaint(); }
+                @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { actualizar(); }
+                @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { actualizar(); }
+                @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { actualizar(); }
+                private void actualizar() {
+                    // revalidate() es necesario (no solo repaint()) porque este panel es el
+                    // rowHeaderView de un JScrollPane: su alto depende de la cantidad de líneas
+                    // (getPreferredSize()) y el scroll pane solo lo vuelve a medir con revalidate().
+                    // invokeLater asegura que el JTextArea ya terminó de re-layoutear el texto
+                    // antes de que paintComponent llame a modelToView.
+                    SwingUtilities.invokeLater(() -> {
+                        revalidate();
+                        repaint();
+                    });
+                }
             });
         }
         @Override
