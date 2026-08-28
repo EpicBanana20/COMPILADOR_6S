@@ -195,8 +195,6 @@ public class Parser {
                 int lineaCambio = (tokenActual != null) ? tokenActual.linea : 0;
                 String linea1 = "Linea " + lineaCambio + " - Area de declaración - False";
                 String linea2 = "Linea " + lineaCambio + " - Area de ejecución - True";
-                System.out.println(linea1);
-                System.out.println(linea2);
                 logAreas.add(linea1);
                 logAreas.add(linea2);
                 continue;
@@ -207,8 +205,6 @@ public class Parser {
                 int lineaCambio = (tokenActual != null) ? tokenActual.linea : 0;
                 String linea1 = "Linea " + lineaCambio + " - Area de ejecución - False";
                 String linea2 = "Linea " + lineaCambio + " - Area de declaración - True";
-                System.out.println(linea1);
-                System.out.println(linea2);
                 logAreas.add(linea1);
                 logAreas.add(linea2);
                 continue;
