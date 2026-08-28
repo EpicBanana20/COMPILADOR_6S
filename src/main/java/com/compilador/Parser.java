@@ -16,6 +16,7 @@ public class Parser {
     private List<String> erroresSintacticos;
     private Map<String, Integer> contadoresDiagramasPrincipales;
     private boolean areaDeclaracion;
+    private List<String> logAreas;
 
     private static final Map<String, String> CODIGO_A_TOKEN = new LinkedHashMap<>();
 
@@ -161,6 +162,7 @@ public class Parser {
         this.erroresSintacticos = new ArrayList<>();
         this.contadoresDiagramasPrincipales = new java.util.LinkedHashMap<>();
         this.areaDeclaracion = true;
+        this.logAreas = new ArrayList<>();
     }
 
     public void ejecutar(List<Token> tokensRecibidos) {
@@ -170,6 +172,7 @@ public class Parser {
         this.erroresSintacticos = new ArrayList<>();
         this.contadoresDiagramasPrincipales = new java.util.LinkedHashMap<>();
         this.areaDeclaracion = true;
+        this.logAreas = new ArrayList<>();
 
         pila.push("$");
         pila.push("PROGRAMA");
@@ -190,16 +193,24 @@ public class Parser {
                 pila.pop();
                 areaDeclaracion = false;
                 int lineaCambio = (tokenActual != null) ? tokenActual.linea : 0;
-                System.out.println("Linea " + lineaCambio + " - Area de declaración - False");
-                System.out.println("Linea " + lineaCambio + " - Area de ejecución - True");
+                String linea1 = "Linea " + lineaCambio + " - Area de declaración - False";
+                String linea2 = "Linea " + lineaCambio + " - Area de ejecución - True";
+                System.out.println(linea1);
+                System.out.println(linea2);
+                logAreas.add(linea1);
+                logAreas.add(linea2);
                 continue;
             }
             if (cimaPila.equals("801")) {
                 pila.pop();
                 areaDeclaracion = true;
                 int lineaCambio = (tokenActual != null) ? tokenActual.linea : 0;
-                System.out.println("Linea " + lineaCambio + " - Area de ejecución - False");
-                System.out.println("Linea " + lineaCambio + " - Area de declaración - True");
+                String linea1 = "Linea " + lineaCambio + " - Area de ejecución - False";
+                String linea2 = "Linea " + lineaCambio + " - Area de declaración - True";
+                System.out.println(linea1);
+                System.out.println(linea2);
+                logAreas.add(linea1);
+                logAreas.add(linea2);
                 continue;
             }
 
@@ -532,6 +543,10 @@ public class Parser {
 
     public boolean isAreaDeclaracion() {
         return areaDeclaracion;
+    }
+
+    public List<String> getLogAreas() {
+        return logAreas;
     }
 
     private boolean esDiagramaPrincipal(String noTerminal) {

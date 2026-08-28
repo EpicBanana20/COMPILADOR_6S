@@ -47,7 +47,11 @@ public class Main {
             // CREACIÓN DEL EXCEL
             CrearXLS logicaExcel = new CrearXLS(ventana, parser);
             ventana.getBtnCrearXls().addActionListener(e -> logicaExcel.ejecutar());
-            
+
+            // CREACIÓN DEL TXT (Áreas de declaración/ejecución)
+            CrearTxt logicaTxt = new CrearTxt(ventana, parser);
+            ventana.getBtnCrearTxt().addActionListener(e -> logicaTxt.ejecutar());
+
             ventana.setVisible(true);
         });
     }
