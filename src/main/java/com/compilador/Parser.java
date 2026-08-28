@@ -15,6 +15,7 @@ public class Parser {
     private Stack<String> pila;
     private List<String> erroresSintacticos;
     private Map<String, Integer> contadoresDiagramasPrincipales;
+    private boolean areaDeclaracion;
 
     private static final Map<String, String> CODIGO_A_TOKEN = new LinkedHashMap<>();
 
@@ -159,6 +160,7 @@ public class Parser {
         this.pila = new Stack<>();
         this.erroresSintacticos = new ArrayList<>();
         this.contadoresDiagramasPrincipales = new java.util.LinkedHashMap<>();
+        this.areaDeclaracion = true;
     }
 
     public void ejecutar(List<Token> tokensRecibidos) {
@@ -167,6 +169,7 @@ public class Parser {
         this.pila = new Stack<>();
         this.erroresSintacticos = new ArrayList<>();
         this.contadoresDiagramasPrincipales = new java.util.LinkedHashMap<>();
+        this.areaDeclaracion = true;
 
         pila.push("$");
         pila.push("PROGRAMA");
@@ -182,6 +185,23 @@ public class Parser {
             String simboloActual = (tokenActual != null) ? tokenActual.token : "$";
             String simboloActualNormalizado = simboloActual.startsWith("-") ? codigoAToken(simboloActual) : simboloActual;
             if (simboloActualNormalizado == null) simboloActualNormalizado = simboloActual;
+
+            if (cimaPila.equals("800")) {
+                pila.pop();
+                areaDeclaracion = false;
+                int lineaCambio = (tokenActual != null) ? tokenActual.linea : 0;
+                System.out.println("Linea " + lineaCambio + " - Area de declaración - False");
+                System.out.println("Linea " + lineaCambio + " - Area de ejecución - True");
+                continue;
+            }
+            if (cimaPila.equals("801")) {
+                pila.pop();
+                areaDeclaracion = true;
+                int lineaCambio = (tokenActual != null) ? tokenActual.linea : 0;
+                System.out.println("Linea " + lineaCambio + " - Area de ejecución - False");
+                System.out.println("Linea " + lineaCambio + " - Area de declaración - True");
+                continue;
+            }
 
             if (cimaPila.equals("$")) {
                 if (simboloActual.equals("$")) {
@@ -508,6 +528,10 @@ public class Parser {
 
     public int getTotalErroresSintacticos() {
         return erroresSintacticos.size();
+    }
+
+    public boolean isAreaDeclaracion() {
+        return areaDeclaracion;
     }
 
     private boolean esDiagramaPrincipal(String noTerminal) {
