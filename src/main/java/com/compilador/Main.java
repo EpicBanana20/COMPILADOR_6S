@@ -52,6 +52,10 @@ public class Main {
             CrearTxt logicaTxt = new CrearTxt(ventana, parser);
             ventana.getBtnCrearTxt().addActionListener(e -> logicaTxt.ejecutar());
 
+            // CREACIÓN DEL TXT (Ámbitos)
+            CrearTxtAmbito logicaTxtAmbito = new CrearTxtAmbito(ventana, parser);
+            ventana.getBtnCrearTxtAmbito().addActionListener(e -> logicaTxtAmbito.ejecutar());
+
             ventana.setVisible(true);
         });
     }

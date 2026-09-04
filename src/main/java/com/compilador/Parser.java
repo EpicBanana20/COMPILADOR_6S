@@ -17,6 +17,9 @@ public class Parser {
     private Map<String, Integer> contadoresDiagramasPrincipales;
     private boolean areaDeclaracion;
     private List<String> logAreas;
+    private Stack<Integer> pilaAmbitos;
+    private int contadorAmbitos;
+    private List<String> logAmbitos;
 
     private static final Map<String, String> CODIGO_A_TOKEN = new LinkedHashMap<>();
 
@@ -163,6 +166,9 @@ public class Parser {
         this.contadoresDiagramasPrincipales = new java.util.LinkedHashMap<>();
         this.areaDeclaracion = true;
         this.logAreas = new ArrayList<>();
+        this.pilaAmbitos = new Stack<>();
+        this.contadorAmbitos = 0;
+        this.logAmbitos = new ArrayList<>();
     }
 
     public void ejecutar(List<Token> tokensRecibidos) {
@@ -173,9 +179,16 @@ public class Parser {
         this.contadoresDiagramasPrincipales = new java.util.LinkedHashMap<>();
         this.areaDeclaracion = true;
         this.logAreas = new ArrayList<>();
+        this.pilaAmbitos = new Stack<>();
+        this.contadorAmbitos = 0;
+        this.logAmbitos = new ArrayList<>();
 
         pila.push("$");
         pila.push("PROGRAMA");
+
+        pilaAmbitos.push(contadorAmbitos);
+        logAmbitos.add("Creación ámbito: [" + contadorAmbitos + ",1]");
+        logAmbitos.add("Pila -> " + formatoPilaAmbitos());
 
         boolean analisisExitoso = true;
         int pasos = 0;
@@ -210,8 +223,33 @@ public class Parser {
                 continue;
             }
 
+            if (cimaPila.equals("802")) {
+                pila.pop();
+                contadorAmbitos++;
+                int lineaCambio = (tokenActual != null) ? tokenActual.linea : 0;
+                pilaAmbitos.push(contadorAmbitos);
+                logAmbitos.add("Creación ámbito: [" + contadorAmbitos + "," + lineaCambio + "]");
+                logAmbitos.add("Pila -> " + formatoPilaAmbitos());
+                continue;
+            }
+            if (cimaPila.equals("803")) {
+                pila.pop();
+                int lineaCambio = (tokenActual != null) ? tokenActual.linea : 0;
+                int idEliminado = pilaAmbitos.isEmpty() ? -1 : pilaAmbitos.pop();
+                logAmbitos.add("Eliminación ámbito: [" + idEliminado + "," + lineaCambio + "]");
+                logAmbitos.add("Pila -> " + formatoPilaAmbitos());
+                continue;
+            }
+
             if (cimaPila.equals("$")) {
                 if (simboloActual.equals("$")) {
+                    if (!pilaAmbitos.isEmpty()) {
+                        int lineaCambio = (tokenActual != null) ? tokenActual.linea
+                                : (posicionActual > 0 ? tokens.get(posicionActual - 1).linea : 0);
+                        int idEliminado = pilaAmbitos.pop();
+                        logAmbitos.add("Eliminación ámbito: [" + idEliminado + "," + lineaCambio + "]");
+                        logAmbitos.add("Pila -> " + formatoPilaAmbitos());
+                    }
                     break;
                 } else {
                     erroresSintacticos.add("Error en línea " + (tokenActual != null ? tokenActual.linea : 0) + ": Se esperaba FIN DE ARCHIVO");
@@ -543,6 +581,19 @@ public class Parser {
 
     public List<String> getLogAreas() {
         return logAreas;
+    }
+
+    public List<String> getLogAmbitos() {
+        return logAmbitos;
+    }
+
+    private String formatoPilaAmbitos() {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < pilaAmbitos.size(); i++) {
+            if (i > 0) sb.append(",");
+            sb.append(pilaAmbitos.get(i));
+        }
+        return sb.append("]").toString();
     }
 
     private boolean esDiagramaPrincipal(String noTerminal) {
