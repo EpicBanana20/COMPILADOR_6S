@@ -4,7 +4,10 @@ import java.awt.FileDialog;
 import java.awt.Frame;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import javax.swing.JOptionPane;
 import javax.swing.table.DefaultTableModel;
@@ -45,11 +48,14 @@ public class CrearXLS {
             String rutaAbsoluta = new File(dir, file).getAbsolutePath();
             Map<String, Integer> contadoresSintaxis = parser != null ? parser.getContadoresDiagramasPrincipales() : new java.util.LinkedHashMap<>();
             int totalErroresSintacticos = parser != null ? parser.getTotalErroresSintacticos() : 0;
-            generarExcel(rutaAbsoluta, gui.getModeloTokens(), gui.getModeloErrores(), gui.getModeloPila(), contadoresSintaxis, totalErroresSintacticos);
+            TablaSimbolos tablaSimbolos = parser != null ? parser.getTablaSimbolos() : new TablaSimbolos();
+            Map<Integer, Integer> erroresPorAmbito = parser != null ? parser.getErroresPorAmbito() : new java.util.LinkedHashMap<>();
+            List<int[]> eventosAmbito = parser != null ? parser.getEventosAmbito() : new ArrayList<>();
+            generarExcel(rutaAbsoluta, gui.getModeloTokens(), gui.getModeloErrores(), gui.getModeloPila(), contadoresSintaxis, totalErroresSintacticos, tablaSimbolos, erroresPorAmbito, eventosAmbito);
         }
     }
 
-    private void generarExcel(String rutaAbsoluta, DefaultTableModel modeloTokens, DefaultTableModel modeloErrores, DefaultTableModel modeloContadores, Map<String, Integer> contadoresSintaxis, int totalErroresSintacticos) {
+    private void generarExcel(String rutaAbsoluta, DefaultTableModel modeloTokens, DefaultTableModel modeloErrores, DefaultTableModel modeloContadores, Map<String, Integer> contadoresSintaxis, int totalErroresSintacticos, TablaSimbolos tablaSimbolos, Map<Integer, Integer> erroresPorAmbito, List<int[]> eventosAmbito) {
         try (Workbook workbook = new XSSFWorkbook()) {
 
             // =========================================================
@@ -59,6 +65,17 @@ public class CrearXLS {
             estiloCentrado.setAlignment(HorizontalAlignment.CENTER);
             estiloCentrado.setVerticalAlignment(VerticalAlignment.CENTER);
             estiloCentrado.setWrapText(true); // Esto es el "Ajustar texto"
+
+            // Estilo destacado (negrita + fondo) para las columnas id/tipo/Clase de "Tabla de Simbolos"
+            org.apache.poi.ss.usermodel.Font fontDestacada = workbook.createFont();
+            fontDestacada.setBold(true);
+            CellStyle estiloDestacado = workbook.createCellStyle();
+            estiloDestacado.setAlignment(HorizontalAlignment.CENTER);
+            estiloDestacado.setVerticalAlignment(VerticalAlignment.CENTER);
+            estiloDestacado.setWrapText(true);
+            estiloDestacado.setFont(fontDestacada);
+            estiloDestacado.setFillForegroundColor(org.apache.poi.ss.usermodel.IndexedColors.LIGHT_YELLOW.getIndex());
+            estiloDestacado.setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
 
             // --- 1. Hoja de TOKENS ---
             Sheet sheetTokens = workbook.createSheet("TOKENS");
@@ -76,7 +93,15 @@ public class CrearXLS {
             Sheet sheetSintaxis = workbook.createSheet("Sintaxis");
             escribirTablaSintaxis(sheetSintaxis, contadoresSintaxis, totalErroresSintacticos, estiloCentrado);
 
-            // Guardamos el archivo físicamente 
+            // --- 5. Hoja de Tabla de Simbolos ---
+            Sheet sheetTablaSimbolos = workbook.createSheet("Tabla de Simbolos");
+            escribirTablaSimbolos(sheetTablaSimbolos, tablaSimbolos, estiloCentrado, estiloDestacado);
+
+            // --- 6. Hoja de Ámbito ---
+            Sheet sheetAmbito = workbook.createSheet("Ámbito");
+            escribirTablaAmbito(sheetAmbito, tablaSimbolos, erroresPorAmbito, eventosAmbito, estiloCentrado);
+
+            // Guardamos el archivo físicamente
             try (FileOutputStream fileOut = new FileOutputStream(rutaAbsoluta)) {
                 workbook.write(fileOut);
             }
@@ -299,6 +324,121 @@ public class CrearXLS {
             Cell valueCell = row2.createCell(i + 1);
             valueCell.setCellValue(String.valueOf(conteo));
             valueCell.setCellStyle(estilo);
+        }
+    }
+
+    // Método para estructurar la hoja "Tabla de Simbolos"
+    private void escribirTablaSimbolos(Sheet sheet, TablaSimbolos tablaSimbolos, CellStyle estilo, CellStyle estiloDestacado) {
+        String[] headers = {"id", "tipo", "Clase", "amb", "Tarr", "DimArr", "NoPar", "TParr"};
+        Row headerRow = sheet.createRow(0);
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(i < 3 ? estiloDestacado : estilo);
+        }
+
+        int filaExcel = 1;
+        for (Simbolo s : tablaSimbolos.getFilas()) {
+            Row row = sheet.createRow(filaExcel++);
+            String[] valores = {
+                s.getId(), s.getTipo(), s.getClase(), String.valueOf(s.getAmb()),
+                s.getTarr(), s.getDimArr(), s.getNoPar(), s.getTParr()
+            };
+            for (int c = 0; c < valores.length; c++) {
+                Cell cell = row.createCell(c);
+                cell.setCellValue(valores[c]);
+                cell.setCellStyle(c < 3 ? estiloDestacado : estilo);
+            }
+        }
+    }
+
+    // Método para estructurar la hoja "Ámbito": agrega la Tabla de Simbolos por (ambito, tipo)
+    // y suma los errores semánticos (Tarea 2: variable no declarada/duplicada, código 45/46) por
+    // ámbito. Cada tipo de error va en su propia hoja: léxico->CONTADORES, sintáctico->Sintaxis,
+    // semántico/ámbito->Ámbito (además todos aparecen juntos en la hoja "Errores" general).
+    private void escribirTablaAmbito(Sheet sheet, TablaSimbolos tablaSimbolos, Map<Integer, Integer> erroresAmbitoPorAmbito,
+                                       List<int[]> eventosAmbito, CellStyle estilo) {
+        String[] headers = {"Ambito", "Bin", "Dec", "Oct", "Hex", "Real", "exp", "Cadena", "Boolean", "Errores", "total"};
+        Row headerRow = sheet.createRow(0);
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(estilo);
+        }
+
+        Map<String, Integer> tipoAColumna = new LinkedHashMap<>();
+        tipoAColumna.put("bin", 0);
+        tipoAColumna.put("dec", 1);
+        tipoAColumna.put("oct", 2);
+        tipoAColumna.put("hex", 3);
+        tipoAColumna.put("real", 4);
+        tipoAColumna.put("exp", 5);
+        tipoAColumna.put("cadena", 6);
+        tipoAColumna.put("bool", 7);
+
+        List<Integer> ordenAmbitos = new ArrayList<>();
+        for (int[] evento : eventosAmbito) {
+            if (evento[2] == 1) {
+                ordenAmbitos.add(evento[0]);
+            }
+        }
+
+        Map<Integer, int[]> conteosPorAmbito = new LinkedHashMap<>();
+        for (Integer id : ordenAmbitos) {
+            conteosPorAmbito.put(id, new int[8]);
+        }
+        for (Simbolo s : tablaSimbolos.getFilas()) {
+            int[] fila = conteosPorAmbito.get(s.getAmb());
+            if (fila == null) {
+                fila = new int[8];
+                conteosPorAmbito.put(s.getAmb(), fila);
+            }
+            Integer col = tipoAColumna.get(s.getTipo());
+            if (col != null) {
+                fila[col]++;
+            }
+        }
+
+        int[] totales = new int[10];
+        int filaExcel = 1;
+        for (Integer id : ordenAmbitos) {
+            Row row = sheet.createRow(filaExcel++);
+
+            Cell cAmbito = row.createCell(0);
+            cAmbito.setCellValue(String.valueOf(id));
+            cAmbito.setCellStyle(estilo);
+
+            int[] conteo = conteosPorAmbito.getOrDefault(id, new int[8]);
+            int suma = 0;
+            for (int i = 0; i < 8; i++) {
+                Cell c = row.createCell(i + 1);
+                c.setCellValue(String.valueOf(conteo[i]));
+                c.setCellStyle(estilo);
+                suma += conteo[i];
+                totales[i] += conteo[i];
+            }
+
+            int errores = erroresAmbitoPorAmbito.getOrDefault(id, 0);
+            Cell cErrores = row.createCell(9);
+            cErrores.setCellValue(String.valueOf(errores));
+            cErrores.setCellStyle(estilo);
+            totales[8] += errores;
+
+            int total = suma + errores;
+            Cell cTotal = row.createCell(10);
+            cTotal.setCellValue(String.valueOf(total));
+            cTotal.setCellStyle(estilo);
+            totales[9] += total;
+        }
+
+        Row totalRow = sheet.createRow(filaExcel);
+        Cell cTotalLabel = totalRow.createCell(0);
+        cTotalLabel.setCellValue("Total");
+        cTotalLabel.setCellStyle(estilo);
+        for (int i = 0; i < 10; i++) {
+            Cell c = totalRow.createCell(i + 1);
+            c.setCellValue(String.valueOf(totales[i]));
+            c.setCellStyle(estilo);
         }
     }
 }

@@ -20,8 +20,31 @@ public class Parser {
     private Stack<Integer> pilaAmbitos;
     private int contadorAmbitos;
     private List<String> logAmbitos;
+    private List<int[]> eventosAmbito;
+    private Map<Integer, Integer> erroresAmbitoPorAmbito;
+
+    private TablaSimbolos tablaSimbolos;
+    private Token ultimoIdConsumido;
+    private Token ultimoConstDecimalConsumido;
+    private Simbolo funcionActual;
+    private int contadorParametros;
+    private Simbolo variableActual;
+    private List<String> dimsBufferActual;
 
     private static final Map<String, String> CODIGO_A_TOKEN = new LinkedHashMap<>();
+
+    private static final Map<String, String> CODIGO_A_TIPO = new LinkedHashMap<>();
+    static {
+        CODIGO_A_TIPO.put("-62", "cadena");
+        CODIGO_A_TIPO.put("-63", "bin");
+        CODIGO_A_TIPO.put("-64", "dec");
+        CODIGO_A_TIPO.put("-65", "oct");
+        CODIGO_A_TIPO.put("-66", "hex");
+        CODIGO_A_TIPO.put("-67", "real");
+        CODIGO_A_TIPO.put("-68", "exp");
+        CODIGO_A_TIPO.put("-69", "bool");
+        CODIGO_A_TIPO.put("-70", "registro");
+    }
 
     static {
         CODIGO_A_TOKEN.put("-1", "+");
@@ -169,6 +192,10 @@ public class Parser {
         this.pilaAmbitos = new Stack<>();
         this.contadorAmbitos = 0;
         this.logAmbitos = new ArrayList<>();
+        this.eventosAmbito = new ArrayList<>();
+        this.erroresAmbitoPorAmbito = new LinkedHashMap<>();
+        this.tablaSimbolos = new TablaSimbolos();
+        this.dimsBufferActual = new ArrayList<>();
     }
 
     public void ejecutar(List<Token> tokensRecibidos) {
@@ -182,6 +209,15 @@ public class Parser {
         this.pilaAmbitos = new Stack<>();
         this.contadorAmbitos = 0;
         this.logAmbitos = new ArrayList<>();
+        this.eventosAmbito = new ArrayList<>();
+        this.erroresAmbitoPorAmbito = new LinkedHashMap<>();
+        this.tablaSimbolos = new TablaSimbolos();
+        this.ultimoIdConsumido = null;
+        this.ultimoConstDecimalConsumido = null;
+        this.funcionActual = null;
+        this.contadorParametros = 0;
+        this.variableActual = null;
+        this.dimsBufferActual = new ArrayList<>();
 
         pila.push("$");
         pila.push("PROGRAMA");
@@ -189,6 +225,7 @@ public class Parser {
         pilaAmbitos.push(contadorAmbitos);
         logAmbitos.add("Creación ámbito: [" + contadorAmbitos + ",1]");
         logAmbitos.add("Pila -> " + formatoPilaAmbitos());
+        eventosAmbito.add(new int[] { contadorAmbitos, 1, 1 });
 
         boolean analisisExitoso = true;
         int pasos = 0;
@@ -225,11 +262,29 @@ public class Parser {
 
             if (cimaPila.equals("802")) {
                 pila.pop();
+                int ambitoPadreActual = pilaAmbitos.peek();
                 contadorAmbitos++;
                 int lineaCambio = (tokenActual != null) ? tokenActual.linea : 0;
                 pilaAmbitos.push(contadorAmbitos);
                 logAmbitos.add("Creación ámbito: [" + contadorAmbitos + "," + lineaCambio + "]");
                 logAmbitos.add("Pila -> " + formatoPilaAmbitos());
+                eventosAmbito.add(new int[] { contadorAmbitos, lineaCambio, 1 });
+
+                if (ultimoIdConsumido != null) {
+                    if (existeEnAmbito(ambitoPadreActual, ultimoIdConsumido.lexema)) {
+                        registrarErrorSemantico(46, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido, ambitoPadreActual);
+                    }
+                    Simbolo fun = new Simbolo(
+                        ultimoIdConsumido.lexema,
+                        CODIGO_A_TIPO.get(ultimoIdConsumido.token),
+                        "fun",
+                        ambitoPadreActual,
+                        "", "0", "0",
+                        String.valueOf(contadorAmbitos));
+                    tablaSimbolos.insertar(fun);
+                    funcionActual = fun;
+                    contadorParametros = 0;
+                }
                 continue;
             }
             if (cimaPila.equals("803")) {
@@ -238,6 +293,64 @@ public class Parser {
                 int idEliminado = pilaAmbitos.isEmpty() ? -1 : pilaAmbitos.pop();
                 logAmbitos.add("Eliminación ámbito: [" + idEliminado + "," + lineaCambio + "]");
                 logAmbitos.add("Pila -> " + formatoPilaAmbitos());
+                eventosAmbito.add(new int[] { idEliminado, lineaCambio, 0 });
+                continue;
+            }
+            if (cimaPila.equals("804")) {
+                pila.pop();
+                if (ultimoIdConsumido != null) {
+                    int ambitoActual = pilaAmbitos.peek();
+                    if (existeEnAmbito(ambitoActual, ultimoIdConsumido.lexema)) {
+                        registrarErrorSemantico(46, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido, ambitoActual);
+                    }
+                    Simbolo var = new Simbolo(
+                        ultimoIdConsumido.lexema,
+                        CODIGO_A_TIPO.get(ultimoIdConsumido.token),
+                        "var",
+                        ambitoActual,
+                        "", "0", "0", "");
+                    tablaSimbolos.insertar(var);
+                    variableActual = var;
+                    dimsBufferActual = new ArrayList<>();
+                }
+                continue;
+            }
+            if (cimaPila.equals("806")) {
+                pila.pop();
+                if (variableActual != null && ultimoConstDecimalConsumido != null) {
+                    dimsBufferActual.add(ultimoConstDecimalConsumido.lexema);
+                    variableActual.setClase("arr");
+                    variableActual.setTarr(String.join(",", dimsBufferActual));
+                    variableActual.setDimArr(String.valueOf(dimsBufferActual.size()));
+                }
+                continue;
+            }
+            if (cimaPila.equals("811")) {
+                pila.pop();
+                if (funcionActual != null && ultimoIdConsumido != null) {
+                    int ambitoActual = pilaAmbitos.peek();
+                    if (existeEnAmbito(ambitoActual, ultimoIdConsumido.lexema)) {
+                        registrarErrorSemantico(46, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido, ambitoActual);
+                    }
+                    contadorParametros++;
+                    Simbolo par = new Simbolo(
+                        ultimoIdConsumido.lexema,
+                        CODIGO_A_TIPO.get(ultimoIdConsumido.token),
+                        "par",
+                        ambitoActual,
+                        "", "0",
+                        String.valueOf(contadorParametros),
+                        funcionActual.getId());
+                    tablaSimbolos.insertar(par);
+                    funcionActual.setNoPar(String.valueOf(contadorParametros));
+                }
+                continue;
+            }
+            if (cimaPila.equals("812")) {
+                pila.pop();
+                if (ultimoIdConsumido != null && !existeEnAmbitoOAncestro(ultimoIdConsumido.lexema)) {
+                    registrarErrorSemantico(45, "Variable no declarada: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido, pilaAmbitos.isEmpty() ? -1 : pilaAmbitos.peek());
+                }
                 continue;
             }
 
@@ -249,6 +362,7 @@ public class Parser {
                         int idEliminado = pilaAmbitos.pop();
                         logAmbitos.add("Eliminación ámbito: [" + idEliminado + "," + lineaCambio + "]");
                         logAmbitos.add("Pila -> " + formatoPilaAmbitos());
+                        eventosAmbito.add(new int[] { idEliminado, lineaCambio, 0 });
                     }
                     break;
                 } else {
@@ -294,7 +408,7 @@ public class Parser {
                         analisisExitoso = false;
                         break;
                     }
-                    
+
                     pila.pop();
                     List<String> produccion = lectorMatriz.getProduccion(codigoProduccion);
                     String noTerminalNormalizado = normalizarNoTerminal(cimaPila);
@@ -329,6 +443,8 @@ public class Parser {
                 boolean coinciden = cimaNormalizada.equals(tokenNormalizado);
 
                 if (coinciden) {
+                    if (cimaNormalizada.equals("id")) ultimoIdConsumido = tokenActual;
+                    if (cimaNormalizada.equals("Const_Decimal")) ultimoConstDecimalConsumido = tokenActual;
                     pila.pop();
                     posicionActual++;
                 } else {
@@ -585,6 +701,44 @@ public class Parser {
 
     public List<String> getLogAmbitos() {
         return logAmbitos;
+    }
+
+    private void registrarErrorAmbito(int ambito) {
+        if (ambito < 0) return;
+        erroresAmbitoPorAmbito.put(ambito, erroresAmbitoPorAmbito.getOrDefault(ambito, 0) + 1);
+    }
+
+    private boolean existeEnAmbito(int ambito, String id) {
+        Map<String, Simbolo> simbolosAmbito = tablaSimbolos.getIndicePorAmbito().get(ambito);
+        return simbolosAmbito != null && simbolosAmbito.containsKey(id);
+    }
+
+    private boolean existeEnAmbitoOAncestro(String id) {
+        for (int i = pilaAmbitos.size() - 1; i >= 0; i--) {
+            if (existeEnAmbito(pilaAmbitos.get(i), id)) return true;
+        }
+        return false;
+    }
+
+    private void registrarErrorSemantico(int codigo, String descripcion, Token token, int ambito) {
+        int linea = (token != null) ? token.linea : 0;
+        String lexema = (token != null) ? token.lexema : "";
+        if (gui != null) {
+            gui.getModeloErrores().addRow(new Object[] { String.valueOf(codigo), descripcion, lexema, "Ambito", String.valueOf(linea) });
+        }
+        registrarErrorAmbito(ambito);
+    }
+
+    public TablaSimbolos getTablaSimbolos() {
+        return tablaSimbolos;
+    }
+
+    public Map<Integer, Integer> getErroresPorAmbito() {
+        return erroresAmbitoPorAmbito;
+    }
+
+    public List<int[]> getEventosAmbito() {
+        return eventosAmbito;
     }
 
     private String formatoPilaAmbitos() {
