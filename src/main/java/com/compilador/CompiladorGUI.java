@@ -59,7 +59,7 @@ public class CompiladorGUI extends JFrame {
         btnAbrir = crearBotonSuave("Abrir Archivo");
         btnCompilar = crearBotonSuave("Compilar (Ejecutar)");
         btnCrearXls = crearBotonSuave("Crear .xls");
-        btnCrearTxt = crearBotonSuave("Crear .txt");
+        btnCrearTxt = crearBotonSuave("Crear .txt Areas");
         btnCrearTxtAmbito = crearBotonSuave("Crear .txt Ámbitos");
 
         labelRutaArchivo = new JLabel("Ningún archivo abierto");
@@ -259,7 +259,7 @@ public class CompiladorGUI extends JFrame {
             setForeground(new Color(110, 110, 110)); 
             setFont(new Font("Consolas", Font.PLAIN, 14));
             setBorder(new EmptyBorder(10, 10, 10, 15)); 
-            component.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            javax.swing.event.DocumentListener listenerDocumento = new javax.swing.event.DocumentListener() {
                 @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { actualizar(); }
                 @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { actualizar(); }
                 @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { actualizar(); }
@@ -274,6 +274,23 @@ public class CompiladorGUI extends JFrame {
                         repaint();
                     });
                 }
+            };
+            component.getDocument().addDocumentListener(listenerDocumento);
+
+            // "Abrir Archivo" usa JTextArea.read(...), que instala un Document NUEVO en vez
+            // de reutilizar el actual — el listener de arriba, suscrito al documento viejo,
+            // deja de recibir eventos y los números de línea quedan congelados hasta que algo
+            // más (scroll, resize) fuerza un repaint. Hay que reengancharlo cada vez que el
+            // JTextArea cambia de documento, y forzar el refresco en ese mismo instante.
+            component.addPropertyChangeListener("document", evt -> {
+                Object nuevoDocumento = evt.getNewValue();
+                if (nuevoDocumento instanceof javax.swing.text.Document) {
+                    ((javax.swing.text.Document) nuevoDocumento).addDocumentListener(listenerDocumento);
+                }
+                SwingUtilities.invokeLater(() -> {
+                    revalidate();
+                    repaint();
+                });
             });
         }
         @Override
