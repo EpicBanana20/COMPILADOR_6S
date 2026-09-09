@@ -1,8 +1,10 @@
 package com.compilador;
 
 import java.io.BufferedReader;
-import java.io.FileReader;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,7 +37,7 @@ public class LecturaMatriz {
     public boolean cargarMatriz(String rutaArchivo) {
         matrizTransiciones.clear(); 
 
-        try (BufferedReader br = new BufferedReader(new FileReader(rutaArchivo))) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(rutaArchivo), StandardCharsets.UTF_8))) {
             String linea;
             String[] encabezados = null;
 
@@ -110,7 +112,7 @@ public class LecturaMatriz {
     public boolean cargarMatrizParser(String rutaArchivo) {
         matrizParser.clear();
 
-        try (BufferedReader br = new BufferedReader(new FileReader(rutaArchivo))) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(rutaArchivo), StandardCharsets.UTF_8))) {
             String linea;
             String[] encabezados = null;
 
@@ -182,7 +184,7 @@ public class LecturaMatriz {
     public boolean cargarProducciones(String rutaArchivo) {
         producciones.clear();
 
-        try (BufferedReader br = new BufferedReader(new FileReader(rutaArchivo))) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(rutaArchivo), StandardCharsets.UTF_8))) {
             String linea;
             boolean primeraLinea = true;
 
