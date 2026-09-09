@@ -93,13 +93,13 @@ public class CrearXLS {
             Sheet sheetSintaxis = workbook.createSheet("Sintaxis");
             escribirTablaSintaxis(sheetSintaxis, contadoresSintaxis, totalErroresSintacticos, estiloCentrado);
 
-            // --- 5. Hoja de Tabla de Simbolos ---
-            Sheet sheetTablaSimbolos = workbook.createSheet("Tabla de Simbolos");
-            escribirTablaSimbolos(sheetTablaSimbolos, tablaSimbolos, estiloCentrado, estiloDestacado);
-
-            // --- 6. Hoja de Ámbito ---
+            // --- 5. Hoja de Ámbito ---
             Sheet sheetAmbito = workbook.createSheet("Ámbito");
             escribirTablaAmbito(sheetAmbito, tablaSimbolos, erroresPorAmbito, eventosAmbito, estiloCentrado);
+
+            // --- 6. Hoja de Tabla de Simbolos ---
+            Sheet sheetTablaSimbolos = workbook.createSheet("Tabla de Simbolos");
+            escribirTablaSimbolos(sheetTablaSimbolos, tablaSimbolos, estiloCentrado, estiloDestacado);
 
             // Guardamos el archivo físicamente
             try (FileOutputStream fileOut = new FileOutputStream(rutaAbsoluta)) {
@@ -143,9 +143,11 @@ public class CrearXLS {
 
     // Método para estructurar la hoja de Errores
     private void escribirTablaErrores(Sheet sheet, DefaultTableModel modelo, CellStyle estilo) {
+        sheet.setColumnWidth(1, 90 * 256); // Columna "Descripción" más ancha para poder leerla sin ajustar manualmente
+
         String[] headers = {"Estado", "Descripción", "Lexema", "Tipo", "Línea"};
         Row headerRow = sheet.createRow(0);
-        
+
         for (int i = 0; i < headers.length; i++) {
             Cell cell = headerRow.createCell(i);
             cell.setCellValue(headers[i]);
@@ -334,7 +336,7 @@ public class CrearXLS {
         for (int i = 0; i < headers.length; i++) {
             Cell cell = headerRow.createCell(i);
             cell.setCellValue(headers[i]);
-            cell.setCellStyle(i < 3 ? estiloDestacado : estilo);
+            cell.setCellStyle(estiloDestacado);
         }
 
         int filaExcel = 1;
@@ -347,7 +349,7 @@ public class CrearXLS {
             for (int c = 0; c < valores.length; c++) {
                 Cell cell = row.createCell(c);
                 cell.setCellValue(valores[c]);
-                cell.setCellStyle(c < 3 ? estiloDestacado : estilo);
+                cell.setCellStyle(estilo);
             }
         }
     }

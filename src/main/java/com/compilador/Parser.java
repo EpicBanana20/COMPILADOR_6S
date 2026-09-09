@@ -272,7 +272,7 @@ public class Parser {
 
                 if (ultimoIdConsumido != null) {
                     if (existeEnAmbito(ambitoPadreActual, ultimoIdConsumido.lexema)) {
-                        registrarErrorSemantico(46, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido, ambitoPadreActual);
+                        registrarErrorSemantico(546, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido,ambitoPadreActual);
                     }
                     Simbolo fun = new Simbolo(
                         ultimoIdConsumido.lexema,
@@ -301,7 +301,7 @@ public class Parser {
                 if (ultimoIdConsumido != null) {
                     int ambitoActual = pilaAmbitos.peek();
                     if (existeEnAmbito(ambitoActual, ultimoIdConsumido.lexema)) {
-                        registrarErrorSemantico(46, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido, ambitoActual);
+                        registrarErrorSemantico(546, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido,ambitoActual);
                     }
                     Simbolo var = new Simbolo(
                         ultimoIdConsumido.lexema,
@@ -312,6 +312,23 @@ public class Parser {
                     tablaSimbolos.insertar(var);
                     variableActual = var;
                     dimsBufferActual = new ArrayList<>();
+                }
+                continue;
+            }
+            if (cimaPila.equals("813")) {
+                pila.pop();
+                if (ultimoIdConsumido != null) {
+                    int ambitoActual = pilaAmbitos.peek();
+                    if (existeEnAmbito(ambitoActual, ultimoIdConsumido.lexema)) {
+                        registrarErrorSemantico(546, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido,ambitoActual);
+                    }
+                    Simbolo constante = new Simbolo(
+                        ultimoIdConsumido.lexema,
+                        CODIGO_A_TIPO.get(ultimoIdConsumido.token),
+                        "const",
+                        ambitoActual,
+                        "", "0", "0", "");
+                    tablaSimbolos.insertar(constante);
                 }
                 continue;
             }
@@ -330,7 +347,7 @@ public class Parser {
                 if (funcionActual != null && ultimoIdConsumido != null) {
                     int ambitoActual = pilaAmbitos.peek();
                     if (existeEnAmbito(ambitoActual, ultimoIdConsumido.lexema)) {
-                        registrarErrorSemantico(46, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido, ambitoActual);
+                        registrarErrorSemantico(546, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido,ambitoActual);
                     }
                     contadorParametros++;
                     Simbolo par = new Simbolo(
@@ -349,7 +366,7 @@ public class Parser {
             if (cimaPila.equals("812")) {
                 pila.pop();
                 if (ultimoIdConsumido != null && !existeEnAmbitoOAncestro(ultimoIdConsumido.lexema)) {
-                    registrarErrorSemantico(45, "Variable no declarada: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido, pilaAmbitos.isEmpty() ? -1 : pilaAmbitos.peek());
+                    registrarErrorSemantico(545, "Variable no declarada: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido, pilaAmbitos.isEmpty() ? -1 : pilaAmbitos.peek());
                 }
                 continue;
             }
