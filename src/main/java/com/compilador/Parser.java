@@ -31,11 +31,12 @@ public class Parser {
     private Simbolo variableActual;
     private List<String> dimsBufferActual;
 
-    // Prefijo de expresiones (acciones 814-824)
+    // Prefijo de asignaciones (acciones 814-822)
     private Token ultimoTokenConsumido;
     private Stack<String> pilaOperandos;
     private Stack<String> pilaOperadores;
-    private Stack<Object[]> pilaMarcas; // { nombre, tamaño de pilaOperandos al abrir }
+    private Stack<int[]> pilaArreglos; // { índice del token id, tamaño de pilaOperandos al abrir }
+    private String objetivoArreglo;
     private int profundidadExpresion;
     private int lineaApertura;
     private List<String> logPrefijos;
@@ -388,8 +389,8 @@ public class Parser {
                 continue;
             }
 
-            // ==================== PREFIJO DE EXPRESIONES (814-824) ====================
-            // Solo actúan dentro de una expresión OR (profundidadExpresion > 0).
+            // ==================== PREFIJO DE ASIGNACIONES (814-822) ====================
+            // Solo actúan dentro de una asignación id ASIG OR (profundidadExpresion > 0).
             if (cimaPila.equals("814")) { // Insertar operando
                 pila.pop();
                 if (profundidadExpresion > 0 && ultimoTokenConsumido != null) {
@@ -421,53 +422,42 @@ public class Parser {
                 if (profundidadExpresion > 0) reducir(3);
                 continue;
             }
-            if (cimaPila.equals("819")) { // Abrir función integrada
+            if (cimaPila.equals("819")) { // Abrir arreglo: recuerda dónde empieza (el id) para tratarlo como una sola variable
                 pila.pop();
-                if (profundidadExpresion > 0 && ultimoTokenConsumido != null) {
-                    pilaMarcas.push(new Object[] { ultimoTokenConsumido.lexema, pilaOperandos.size() });
-                }
+                int base = (profundidadExpresion > 0) ? pilaOperandos.size() - 1 : pilaOperandos.size();
+                pilaArreglos.push(new int[] { posicionActual - 1, base });
                 continue;
             }
-            if (cimaPila.equals("820")) { // Abrir llamada a id de usuario
+            if (cimaPila.equals("820")) { // Cerrar arreglo: $v[$i+1] queda como un solo operando
                 pila.pop();
-                if (profundidadExpresion > 0 && !pilaOperandos.isEmpty()) {
-                    String nombre = pilaOperandos.pop();
-                    pilaMarcas.push(new Object[] { nombre, pilaOperandos.size() });
-                }
-                continue;
-            }
-            if (cimaPila.equals("821")) { // Abrir acceso a arreglo (el id queda como 1er argumento)
-                pila.pop();
-                if (profundidadExpresion > 0 && !pilaOperandos.isEmpty()) {
-                    pilaMarcas.push(new Object[] { "[]", pilaOperandos.size() - 1 });
-                }
-                continue;
-            }
-            if (cimaPila.equals("822")) { // Cerrar llamada/arreglo
-                pila.pop();
-                if (profundidadExpresion > 0 && !pilaMarcas.isEmpty()) {
-                    Object[] marca = pilaMarcas.pop();
-                    int base = (Integer) marca[1];
-                    List<String> argumentos = new ArrayList<>();
-                    while (pilaOperandos.size() > base) {
-                        argumentos.add(0, pilaOperandos.pop());
+                if (!pilaArreglos.isEmpty()) {
+                    int[] marca = pilaArreglos.pop();
+                    StringBuilder texto = new StringBuilder();
+                    for (int i = Math.max(marca[0], 0); i < posicionActual && i < tokens.size(); i++) {
+                        texto.append(tokens.get(i).lexema);
                     }
-                    StringBuilder sb = new StringBuilder((String) marca[0]);
-                    for (String arg : argumentos) sb.append(" ").append(arg);
-                    pilaOperandos.push(sb.toString());
+                    if (profundidadExpresion > 0) {
+                        while (pilaOperandos.size() > marca[1]) pilaOperandos.pop();
+                        insertarOperando(texto.toString());
+                    } else {
+                        objetivoArreglo = texto.toString();
+                    }
                 }
                 continue;
             }
-            if (cimaPila.equals("823")) { // Apertura de expresión
+            if (cimaPila.equals("821")) { // Apertura de asignación (id ASIG OR)
                 pila.pop();
-                if (profundidadExpresion == 0) {
-                    lineaApertura = (tokenActual != null) ? tokenActual.linea : 0;
-                    logPilasExpresion.add("Linea " + lineaApertura + " - Apertura de expresión");
+                if (profundidadExpresion == 0 && ultimoTokenConsumido != null) {
+                    String destino = (ultimoTokenConsumido.lexema.equals("]") && objetivoArreglo != null)
+                        ? objetivoArreglo : ultimoTokenConsumido.lexema;
+                    lineaApertura = ultimoTokenConsumido.linea;
+                    logPilasExpresion.add("Linea " + lineaApertura + " - Apertura de asignación");
+                    insertarOperando(destino);
                 }
                 profundidadExpresion++;
                 continue;
             }
-            if (cimaPila.equals("824")) { // Cierre de expresión
+            if (cimaPila.equals("822")) { // Cierre de asignación
                 pila.pop();
                 profundidadExpresion--;
                 if (profundidadExpresion == 0) {
@@ -893,7 +883,8 @@ public class Parser {
     private void reiniciarExpresion() {
         this.pilaOperandos = new Stack<>();
         this.pilaOperadores = new Stack<>();
-        this.pilaMarcas = new Stack<>();
+        this.pilaArreglos = new Stack<>();
+        this.objetivoArreglo = null;
         this.profundidadExpresion = 0;
         this.lineaApertura = 0;
     }
