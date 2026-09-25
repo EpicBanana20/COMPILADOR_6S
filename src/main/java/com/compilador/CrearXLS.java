@@ -426,7 +426,8 @@ public class CrearXLS {
             cErrores.setCellStyle(estilo);
             totales[8] += errores;
 
-            int total = suma + errores;
+            // El total cuenta solo variables por tipo; los errores van en su propia columna
+            int total = suma;
             Cell cTotal = row.createCell(10);
             cTotal.setCellValue(String.valueOf(total));
             cTotal.setCellStyle(estilo);

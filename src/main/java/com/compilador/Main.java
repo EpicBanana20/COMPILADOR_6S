@@ -50,14 +50,6 @@ public class Main {
             CrearXLS logicaExcel = new CrearXLS(ventana, parser);
             ventana.getBtnCrearXls().addActionListener(e -> logicaExcel.ejecutar());
 
-            // CREACIÓN DEL TXT (Áreas de declaración/ejecución)
-            CrearTxt logicaTxt = new CrearTxt(ventana, parser);
-            ventana.getBtnCrearTxt().addActionListener(e -> logicaTxt.ejecutar());
-
-            // CREACIÓN DEL TXT (Ámbitos)
-            CrearTxtAmbito logicaTxtAmbito = new CrearTxtAmbito(ventana, parser);
-            ventana.getBtnCrearTxtAmbito().addActionListener(e -> logicaTxtAmbito.ejecutar());
-
             // CREACIÓN DEL TXT (Prefijos de expresiones)
             CrearTxtPrefijo logicaTxtPrefijo = new CrearTxtPrefijo(ventana, parser);
             ventana.getBtnCrearTxtPrefijo().addActionListener(e -> logicaTxtPrefijo.ejecutar());
