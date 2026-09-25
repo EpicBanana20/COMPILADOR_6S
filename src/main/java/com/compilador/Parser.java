@@ -31,6 +31,16 @@ public class Parser {
     private Simbolo variableActual;
     private List<String> dimsBufferActual;
 
+    // Prefijo de expresiones (acciones 814-824)
+    private Token ultimoTokenConsumido;
+    private Stack<String> pilaOperandos;
+    private Stack<String> pilaOperadores;
+    private Stack<Object[]> pilaMarcas; // { nombre, tamaño de pilaOperandos al abrir }
+    private int profundidadExpresion;
+    private int lineaApertura;
+    private List<String> logPrefijos;
+    private List<String> logPilasExpresion;
+
     private static final Map<String, String> CODIGO_A_TOKEN = new LinkedHashMap<>();
 
     private static final Map<String, String> CODIGO_A_TIPO = new LinkedHashMap<>();
@@ -196,6 +206,9 @@ public class Parser {
         this.erroresAmbitoPorAmbito = new LinkedHashMap<>();
         this.tablaSimbolos = new TablaSimbolos();
         this.dimsBufferActual = new ArrayList<>();
+        reiniciarExpresion();
+        this.logPrefijos = new ArrayList<>();
+        this.logPilasExpresion = new ArrayList<>();
     }
 
     public void ejecutar(List<Token> tokensRecibidos) {
@@ -218,6 +231,10 @@ public class Parser {
         this.contadorParametros = 0;
         this.variableActual = null;
         this.dimsBufferActual = new ArrayList<>();
+        this.ultimoTokenConsumido = null;
+        reiniciarExpresion();
+        this.logPrefijos = new ArrayList<>();
+        this.logPilasExpresion = new ArrayList<>();
 
         pila.push("$");
         pila.push("PROGRAMA");
@@ -371,6 +388,98 @@ public class Parser {
                 continue;
             }
 
+            // ==================== PREFIJO DE EXPRESIONES (814-824) ====================
+            // Solo actúan dentro de una expresión OR (profundidadExpresion > 0).
+            if (cimaPila.equals("814")) { // Insertar operando
+                pila.pop();
+                if (profundidadExpresion > 0 && ultimoTokenConsumido != null) {
+                    insertarOperando(ultimoTokenConsumido.lexema);
+                }
+                continue;
+            }
+            if (cimaPila.equals("815")) { // Insertar operador
+                pila.pop();
+                if (profundidadExpresion > 0 && ultimoTokenConsumido != null) {
+                    pilaOperadores.push(ultimoTokenConsumido.lexema);
+                    logPilasExpresion.add("Linea " + ultimoTokenConsumido.linea + " - Inserción operador: " + ultimoTokenConsumido.lexema
+                        + " -> Pila operadores " + formatoPila(pilaOperadores));
+                }
+                continue;
+            }
+            if (cimaPila.equals("816")) { // Reducir binario
+                pila.pop();
+                if (profundidadExpresion > 0) reducir(2);
+                continue;
+            }
+            if (cimaPila.equals("817")) { // Reducir unario
+                pila.pop();
+                if (profundidadExpresion > 0) reducir(1);
+                continue;
+            }
+            if (cimaPila.equals("818")) { // Reducir ternario
+                pila.pop();
+                if (profundidadExpresion > 0) reducir(3);
+                continue;
+            }
+            if (cimaPila.equals("819")) { // Abrir función integrada
+                pila.pop();
+                if (profundidadExpresion > 0 && ultimoTokenConsumido != null) {
+                    pilaMarcas.push(new Object[] { ultimoTokenConsumido.lexema, pilaOperandos.size() });
+                }
+                continue;
+            }
+            if (cimaPila.equals("820")) { // Abrir llamada a id de usuario
+                pila.pop();
+                if (profundidadExpresion > 0 && !pilaOperandos.isEmpty()) {
+                    String nombre = pilaOperandos.pop();
+                    pilaMarcas.push(new Object[] { nombre, pilaOperandos.size() });
+                }
+                continue;
+            }
+            if (cimaPila.equals("821")) { // Abrir acceso a arreglo (el id queda como 1er argumento)
+                pila.pop();
+                if (profundidadExpresion > 0 && !pilaOperandos.isEmpty()) {
+                    pilaMarcas.push(new Object[] { "[]", pilaOperandos.size() - 1 });
+                }
+                continue;
+            }
+            if (cimaPila.equals("822")) { // Cerrar llamada/arreglo
+                pila.pop();
+                if (profundidadExpresion > 0 && !pilaMarcas.isEmpty()) {
+                    Object[] marca = pilaMarcas.pop();
+                    int base = (Integer) marca[1];
+                    List<String> argumentos = new ArrayList<>();
+                    while (pilaOperandos.size() > base) {
+                        argumentos.add(0, pilaOperandos.pop());
+                    }
+                    StringBuilder sb = new StringBuilder((String) marca[0]);
+                    for (String arg : argumentos) sb.append(" ").append(arg);
+                    pilaOperandos.push(sb.toString());
+                }
+                continue;
+            }
+            if (cimaPila.equals("823")) { // Apertura de expresión
+                pila.pop();
+                if (profundidadExpresion == 0) {
+                    lineaApertura = (tokenActual != null) ? tokenActual.linea : 0;
+                    logPilasExpresion.add("Linea " + lineaApertura + " - Apertura de expresión");
+                }
+                profundidadExpresion++;
+                continue;
+            }
+            if (cimaPila.equals("824")) { // Cierre de expresión
+                pila.pop();
+                profundidadExpresion--;
+                if (profundidadExpresion == 0) {
+                    String prefijo = String.join(" ", pilaOperandos);
+                    String lineaPrefijo = "Linea " + lineaApertura + " - Prefijo: " + prefijo;
+                    logPrefijos.add(lineaPrefijo);
+                    logPilasExpresion.add(lineaPrefijo);
+                    reiniciarExpresion();
+                }
+                continue;
+            }
+
             if (cimaPila.equals("$")) {
                 if (simboloActual.equals("$")) {
                     if (!pilaAmbitos.isEmpty()) {
@@ -462,6 +571,7 @@ public class Parser {
                 if (coinciden) {
                     if (cimaNormalizada.equals("id")) ultimoIdConsumido = tokenActual;
                     if (cimaNormalizada.equals("Const_Decimal")) ultimoConstDecimalConsumido = tokenActual;
+                    ultimoTokenConsumido = tokenActual;
                     pila.pop();
                     posicionActual++;
                 } else {
@@ -475,6 +585,11 @@ public class Parser {
                     break;
                 }
             }
+        }
+
+        // Una expresión interrumpida por un error sintáctico queda incompleta: no se emite su prefijo
+        if (profundidadExpresion > 0) {
+            reiniciarExpresion();
         }
     }
 
@@ -763,6 +878,57 @@ public class Parser {
         for (int i = 0; i < pilaAmbitos.size(); i++) {
             if (i > 0) sb.append(",");
             sb.append(pilaAmbitos.get(i));
+        }
+        return sb.append("]").toString();
+    }
+
+    public List<String> getLogPrefijos() {
+        return logPrefijos;
+    }
+
+    public List<String> getLogPilasExpresion() {
+        return logPilasExpresion;
+    }
+
+    private void reiniciarExpresion() {
+        this.pilaOperandos = new Stack<>();
+        this.pilaOperadores = new Stack<>();
+        this.pilaMarcas = new Stack<>();
+        this.profundidadExpresion = 0;
+        this.lineaApertura = 0;
+    }
+
+    private void insertarOperando(String valor) {
+        pilaOperandos.push(valor);
+        int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
+        logPilasExpresion.add("Linea " + linea + " - Inserción operando: " + valor
+            + " -> Pila operandos " + formatoPila(pilaOperandos));
+    }
+
+    // Saca el operador de la cima y sus operandos, y deja la operación en prefijo como un solo operando
+    private void reducir(int aridad) {
+        if (pilaOperadores.isEmpty() || pilaOperandos.size() < aridad) return;
+        String operador = pilaOperadores.pop();
+        String[] operandos = new String[aridad];
+        for (int i = aridad - 1; i >= 0; i--) {
+            operandos[i] = pilaOperandos.pop();
+        }
+
+        String resultado;
+        if (aridad == 1 && operador.equals("+")) {
+            resultado = operandos[0];
+        } else {
+            if (aridad == 1 && operador.equals("-")) operador = "neg";
+            resultado = operador + " " + String.join(" ", operandos);
+        }
+        pilaOperandos.push(resultado);
+    }
+
+    private String formatoPila(Stack<String> pilaExpresion) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < pilaExpresion.size(); i++) {
+            if (i > 0) sb.append(", ");
+            sb.append(pilaExpresion.get(i));
         }
         return sb.append("]").toString();
     }

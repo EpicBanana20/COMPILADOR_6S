@@ -42,6 +42,8 @@ public class Main {
             ventana.getBtnCompilar().addActionListener(e -> {
                 logicaCompilar.ejecutar();
                 parser.ejecutar(logicaCompilar.getTokensAnalizados());
+                System.out.println("\n=== PREFIJOS ===");
+                parser.getLogPrefijos().forEach(System.out::println);
             });
 
             // CREACIÓN DEL EXCEL
@@ -55,6 +57,10 @@ public class Main {
             // CREACIÓN DEL TXT (Ámbitos)
             CrearTxtAmbito logicaTxtAmbito = new CrearTxtAmbito(ventana, parser);
             ventana.getBtnCrearTxtAmbito().addActionListener(e -> logicaTxtAmbito.ejecutar());
+
+            // CREACIÓN DEL TXT (Prefijos de expresiones)
+            CrearTxtPrefijo logicaTxtPrefijo = new CrearTxtPrefijo(ventana, parser);
+            ventana.getBtnCrearTxtPrefijo().addActionListener(e -> logicaTxtPrefijo.ejecutar());
 
             ventana.setVisible(true);
         });

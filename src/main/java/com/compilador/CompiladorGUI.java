@@ -36,6 +36,7 @@ public class CompiladorGUI extends JFrame {
     private JButton btnCrearXls;
     private JButton btnCrearTxt;
     private JButton btnCrearTxtAmbito;
+    private JButton btnCrearTxtPrefijo;
 
     // Modelos de tabla
     private DefaultTableModel modeloTokens;
@@ -61,6 +62,7 @@ public class CompiladorGUI extends JFrame {
         btnCrearXls = crearBotonSuave("Crear .xls");
         btnCrearTxt = crearBotonSuave("Crear .txt Areas");
         btnCrearTxtAmbito = crearBotonSuave("Crear .txt Ámbitos");
+        btnCrearTxtPrefijo = crearBotonSuave("Crear .txt Prefijos");
 
         labelRutaArchivo = new JLabel("Ningún archivo abierto");
         labelRutaArchivo.setForeground(new Color(150, 150, 150));
@@ -71,6 +73,7 @@ public class CompiladorGUI extends JFrame {
         panelNorte.add(btnCrearXls);
         panelNorte.add(btnCrearTxt);
         panelNorte.add(btnCrearTxtAmbito);
+        panelNorte.add(btnCrearTxtPrefijo);
         panelNorte.add(Box.createHorizontalStrut(20));
         panelNorte.add(labelRutaArchivo);
 
@@ -347,6 +350,7 @@ public class CompiladorGUI extends JFrame {
     public JButton getBtnCrearXls() { return btnCrearXls; }
     public JButton getBtnCrearTxt() { return btnCrearTxt; }
     public JButton getBtnCrearTxtAmbito() { return btnCrearTxtAmbito; }
+    public JButton getBtnCrearTxtPrefijo() { return btnCrearTxtPrefijo; }
     public DefaultTableModel getModeloTokens() { return modeloTokens; }
     public DefaultTableModel getModeloErrores() { return modeloErrores; }
     public DefaultTableModel getModeloPila() { return modeloPila; }
