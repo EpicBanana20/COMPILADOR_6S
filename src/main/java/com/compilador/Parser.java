@@ -461,10 +461,12 @@ public class Parser {
                 pila.pop();
                 profundidadExpresion--;
                 if (profundidadExpresion == 0) {
-                    String prefijo = String.join(" ", pilaOperandos);
-                    String lineaPrefijo = "Linea " + lineaApertura + " - Prefijo: " + prefijo;
-                    logPrefijos.add(lineaPrefijo);
-                    logPilasExpresion.add(lineaPrefijo);
+                    // Solo se emite si quedó un único prefijo; arreglos o ternario en el lado derecho no se procesan
+                    if (pilaOperandos.size() == 1) {
+                        String lineaPrefijo = "Linea " + lineaApertura + " - Prefijo: " + pilaOperandos.peek();
+                        logPrefijos.add(lineaPrefijo);
+                        logPilasExpresion.add(lineaPrefijo);
+                    }
                     reiniciarExpresion();
                 }
                 continue;
