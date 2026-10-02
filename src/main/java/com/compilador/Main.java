@@ -25,6 +25,9 @@ public class Main {
             
             // CARGAR PRODUCCIONES GRAMATICALES
             lectorMatriz.cargarProducciones("producciones_gramatica.csv");
+
+            // CARGAR TABLAS DE COMPATIBILIDAD DE TIPOS
+            lectorMatriz.cargarCompatibilidad("COMPATIBILIDAD.csv");
             
             // Imprimir para verificar
             System.out.println("\n=== VERIFICACIÓN DE CARGA ===");
@@ -53,6 +56,10 @@ public class Main {
             // CREACIÓN DEL TXT (Prefijos de expresiones)
             CrearTxtPrefijo logicaTxtPrefijo = new CrearTxtPrefijo(ventana, parser);
             ventana.getBtnCrearTxtPrefijo().addActionListener(e -> logicaTxtPrefijo.ejecutar());
+
+            // CREACIÓN DEL TXT (Temporales con tipo / cuádruplos)
+            CrearTxtTemporales logicaTxtTemporales = new CrearTxtTemporales(ventana, parser);
+            ventana.getBtnCrearTxtTemporales().addActionListener(e -> logicaTxtTemporales.ejecutar());
 
             ventana.setVisible(true);
         });

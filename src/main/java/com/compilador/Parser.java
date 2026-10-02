@@ -33,7 +33,7 @@ public class Parser {
 
     // Prefijo de asignaciones (acciones 814-822)
     private Token ultimoTokenConsumido;
-    private Stack<String> pilaOperandos;
+    private Stack<Operando> pilaOperandos;
     private Stack<String> pilaOperadores;
     private Stack<int[]> pilaArreglos; // { índice del token id, tamaño de pilaOperandos al abrir }
     private String objetivoArreglo;
@@ -41,6 +41,11 @@ public class Parser {
     private int lineaApertura;
     private List<String> logPrefijos;
     private List<String> logPilasExpresion;
+    private List<String> logCuadruplos;
+    private List<String> cuadruplosActuales;
+    private Map<String, Integer> contadoresTemporales; // un contador por tipo de temporal, global a todo el programa
+    private Map<String, Integer> contadoresTemporalesInicio;
+    private List<Object[]> erroresTiposPendientes;
 
     private static final Map<String, String> CODIGO_A_TOKEN = new LinkedHashMap<>();
 
@@ -174,6 +179,24 @@ public class Parser {
         CODIGO_A_TOKEN.put("-112", "concat");
     }
 
+    // Un operando de la pila: su prefijo, el valor que usan los cuádruplos (lexema o temporal) y su tipo
+    private static class Operando {
+        final String prefijo;
+        final String valor;
+        final String tipo;
+
+        Operando(String prefijo, String valor, String tipo) {
+            this.prefijo = prefijo;
+            this.valor = valor;
+            this.tipo = tipo;
+        }
+
+        @Override
+        public String toString() {
+            return prefijo;
+        }
+    }
+
     public static class Token {
         public String token;
         public String lexema;
@@ -210,6 +233,8 @@ public class Parser {
         reiniciarExpresion();
         this.logPrefijos = new ArrayList<>();
         this.logPilasExpresion = new ArrayList<>();
+        this.logCuadruplos = new ArrayList<>();
+        this.contadoresTemporales = new LinkedHashMap<>();
     }
 
     public void ejecutar(List<Token> tokensRecibidos) {
@@ -236,6 +261,8 @@ public class Parser {
         reiniciarExpresion();
         this.logPrefijos = new ArrayList<>();
         this.logPilasExpresion = new ArrayList<>();
+        this.logCuadruplos = new ArrayList<>();
+        this.contadoresTemporales = new LinkedHashMap<>();
 
         pila.push("$");
         pila.push("PROGRAMA");
@@ -451,6 +478,7 @@ public class Parser {
                     String destino = (ultimoTokenConsumido.lexema.equals("]") && objetivoArreglo != null)
                         ? objetivoArreglo : ultimoTokenConsumido.lexema;
                     lineaApertura = ultimoTokenConsumido.linea;
+                    contadoresTemporalesInicio = new LinkedHashMap<>(contadoresTemporales);
                     logPilasExpresion.add("Linea " + lineaApertura + " - Apertura de asignación");
                     insertarOperando(destino);
                 }
@@ -463,9 +491,17 @@ public class Parser {
                 if (profundidadExpresion == 0) {
                     // Solo se emite si quedó un único prefijo; arreglos o ternario en el lado derecho no se procesan
                     if (pilaOperandos.size() == 1) {
-                        String lineaPrefijo = "Linea " + lineaApertura + " - Prefijo: " + pilaOperandos.peek();
+                        String lineaPrefijo = "Linea " + lineaApertura + " - Prefijo: " + pilaOperandos.peek().prefijo;
                         logPrefijos.add(lineaPrefijo);
                         logPilasExpresion.add(lineaPrefijo);
+                        logCuadruplos.add("Linea " + lineaApertura);
+                        logCuadruplos.addAll(cuadruplosActuales);
+                        for (Object[] fila : erroresTiposPendientes) {
+                            if (gui != null) gui.getModeloErrores().addRow(fila);
+                        }
+                    } else {
+                        // Asignación descartada: no deja temporales ni errores de tipos
+                        contadoresTemporales = contadoresTemporalesInicio;
                     }
                     reiniciarExpresion();
                 }
@@ -878,6 +914,10 @@ public class Parser {
         return logPrefijos;
     }
 
+    public List<String> getLogCuadruplos() {
+        return logCuadruplos;
+    }
+
     public List<String> getLogPilasExpresion() {
         return logPilasExpresion;
     }
@@ -889,35 +929,169 @@ public class Parser {
         this.objetivoArreglo = null;
         this.profundidadExpresion = 0;
         this.lineaApertura = 0;
+        this.cuadruplosActuales = new ArrayList<>();
+        this.erroresTiposPendientes = new ArrayList<>();
     }
 
     private void insertarOperando(String valor) {
-        pilaOperandos.push(valor);
+        pilaOperandos.push(new Operando(valor, valor, tipoDeToken(ultimoTokenConsumido)));
         int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
         logPilasExpresion.add("Linea " + linea + " - Inserción operando: " + valor
             + " -> Pila operandos " + formatoPila(pilaOperandos));
     }
 
-    // Saca el operador de la cima y sus operandos, y deja la operación en prefijo como un solo operando
+    // Saca el operador de la cima y sus operandos, deja la operación en prefijo como un solo operando
+    // y registra el cuádruplo (op, valor1, valor2, temporal) con un temporal tipado
     private void reducir(int aridad) {
         if (pilaOperadores.isEmpty() || pilaOperandos.size() < aridad) return;
         String operador = pilaOperadores.pop();
-        String[] operandos = new String[aridad];
+        Operando[] operandos = new Operando[aridad];
         for (int i = aridad - 1; i >= 0; i--) {
             operandos[i] = pilaOperandos.pop();
         }
 
-        String resultado;
         if (aridad == 1 && operador.equals("+")) {
-            resultado = operandos[0];
-        } else {
-            if (aridad == 1 && operador.equals("-")) operador = "neg";
-            resultado = operador + " " + String.join(" ", operandos);
+            pilaOperandos.push(operandos[0]);
+            return;
         }
-        pilaOperandos.push(resultado);
+        if (aridad == 1 && operador.equals("-")) operador = "neg";
+
+        List<String> prefijos = new ArrayList<>();
+        List<String> valores = new ArrayList<>();
+        for (Operando o : operandos) {
+            prefijos.add(o.prefijo);
+            valores.add(o.valor);
+        }
+        String prefijo = operador + " " + String.join(" ", prefijos);
+
+        if (aridad == 2 && esAsignacion(operador)) {
+            cuadruplosActuales.add(operador + "," + String.join(",", valores));
+            pilaOperandos.push(new Operando(prefijo, operandos[0].valor, operandos[0].tipo));
+            return;
+        }
+
+        String tipo = resolverTipo(operador, operandos);
+        String nombreTipo = nombreTemporal(tipo);
+        int numero = contadoresTemporales.getOrDefault(nombreTipo, 0) + 1;
+        contadoresTemporales.put(nombreTipo, numero);
+        String temporal = nombreTipo + numero;
+        cuadruplosActuales.add(operador + "," + String.join(",", valores) + (aridad == 1 ? "," : "") + "," + temporal);
+        pilaOperandos.push(new Operando(prefijo, temporal, tipo));
     }
 
-    private String formatoPila(Stack<String> pilaExpresion) {
+    private boolean esAsignacion(String operador) {
+        return operador.equals("=") || operador.equals("+=") || operador.equals("-=")
+            || operador.equals("*=") || operador.equals("/=");
+    }
+
+    // Tipo del temporal según la tabla de compatibilidad del operador; si son incompatibles,
+    // se anota un error semántico y el temporal queda como variant
+    private String resolverTipo(String operador, Operando[] operandos) {
+        if (operandos.length == 1) {
+            return operador.equals("!") ? "bool" : operandos[0].tipo;
+        }
+
+        String clave;
+        String nombre;
+        switch (operador) {
+            case "+": clave = "SUMA"; nombre = "suma"; break;
+            case "-": clave = "RESTA"; nombre = "resta"; break;
+            case "*": case "%": case "#": case "^": case "<<": case ">>": case ">>>":
+                clave = "MULT"; nombre = "multiplicación"; break;
+            case "/": clave = "DIV"; nombre = "división"; break;
+            case "<": case ">": case "<=": case ">=": case "==": case "!=":
+                clave = "REL"; nombre = "relacional"; break;
+            case "&&": case "||": case "&": case "|":
+                clave = "LOG"; nombre = "lógico"; break;
+            default:
+                clave = null; nombre = null; break;
+        }
+
+        // Sin tabla (ternario, operador no cubierto o CSV sin cargar): mismo tipo da ese tipo, distinto variant
+        int[][] tabla = (clave != null) ? lectorMatriz.getTablaCompatibilidad(clave) : null;
+        if (tabla == null) {
+            String tipo = operandos[0].tipo;
+            for (int i = 1; i < operandos.length; i++) {
+                if (!tipo.equals(operandos[i].tipo)) return "variant";
+            }
+            return tipo;
+        }
+
+        // Celda positiva = código de error semántico definido en el CSV
+        int celda = tabla[indiceTipo(operandos[0].tipo)][indiceTipo(operandos[1].tipo)];
+        if (celda > 0) {
+            int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
+            erroresTiposPendientes.add(new Object[] {
+                String.valueOf(celda),
+                "Tipos incompatibles para '" + operador + "' (" + nombre + "): "
+                    + etiquetaTipo(operandos[0].tipo) + " y " + etiquetaTipo(operandos[1].tipo),
+                operador, "Semántico", String.valueOf(linea) });
+            return "variant";
+        }
+        return tipoDeCodigo(celda);
+    }
+
+    private static final String[] ORDEN_TIPOS = { "bin", "dec", "oct", "hex", "real", "exp", "cadena", "bool", "variant" };
+
+    private int indiceTipo(String tipo) {
+        for (int i = 0; i < ORDEN_TIPOS.length; i++) {
+            if (ORDEN_TIPOS[i].equals(tipo)) return i;
+        }
+        return ORDEN_TIPOS.length - 1;
+    }
+
+    private String tipoDeCodigo(int codigo) {
+        switch (codigo) {
+            case -1: return "bin";
+            case -2: return "dec";
+            case -3: return "oct";
+            case -4: return "hex";
+            case -5: return "real";
+            case -6: return "exp";
+            case -7: return "cadena";
+            case -8: return "bool";
+            default: return "variant";
+        }
+    }
+
+    private String etiquetaTipo(String tipo) {
+        String t = tipo.equals("bool") ? "Boolean" : tipo;
+        return Character.toUpperCase(t.charAt(0)) + t.substring(1);
+    }
+
+    private String nombreTemporal(String tipo) {
+        switch (tipo) {
+            case "bin": return "TBin";
+            case "dec": return "TDec";
+            case "oct": return "TOct";
+            case "hex": return "THex";
+            case "real": return "TReal";
+            case "exp": return "Texp";
+            case "cadena": return "TCadena";
+            case "bool": return "TBoolean";
+            default: return "TVariant";
+        }
+    }
+
+    // Tipo de un token: los identificadores traen el tipo en su prefijo; las constantes, en su código
+    private String tipoDeToken(Token t) {
+        if (t == null) return "variant";
+        String tipoId = CODIGO_A_TIPO.get(t.token);
+        if (tipoId != null) return tipoId.equals("registro") ? "variant" : tipoId;
+        switch (t.token) {
+            case "-55": return "dec";
+            case "-56": return "real";
+            case "-57": return "exp";
+            case "-53": case "-54": case "-58": return "cadena";
+            case "-59": return "bin";
+            case "-60": return "oct";
+            case "-61": return "hex";
+            case "-105": case "-106": return "bool";
+            default: return "variant";
+        }
+    }
+
+    private String formatoPila(Stack<?> pilaExpresion) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < pilaExpresion.size(); i++) {
             if (i > 0) sb.append(", ");

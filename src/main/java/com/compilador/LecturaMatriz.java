@@ -19,6 +19,7 @@ public class LecturaMatriz {
     private Map<String, Map<String, String>> matrizTransiciones;
     private Map<String, Map<String, Integer>> matrizParser;
     private Map<Integer, List<String>> producciones;
+    private Map<String, int[][]> tablasCompatibilidad;
 
     /**
      * Inicializa la estructura de datos principal para almacenar la matriz de transiciones.
@@ -27,6 +28,7 @@ public class LecturaMatriz {
         matrizTransiciones = new LinkedHashMap<>();
         matrizParser = new LinkedHashMap<>();
         producciones = new LinkedHashMap<>();
+        tablasCompatibilidad = new LinkedHashMap<>();
     }
 
     /**
@@ -172,6 +174,69 @@ public class LecturaMatriz {
             }
         }
         System.out.println("-----------------------------------------\n");
+    }
+
+    // ==================== MÉTODOS PARA TABLAS DE COMPATIBILIDAD ====================
+
+    /**
+     * Lee las tablas de compatibilidad de tipos (COMPATIBILIDAD.csv).
+     * Cada tabla ocupa 9 filas (bin, dec, oct, hex, real, exp, cadena, boolean, variant) y 9 columnas en el mismo orden.
+     * Valor de celda: negativo = tipo resultante (-1 bin, -2 dec, -3 oct, -4 hex, -5 real,
+     * -6 exp, -7 cadena, -8 boolean), 0 = variant, positivo = código de error de incompatibilidad.
+     * @param rutaArchivo Ruta del archivo CSV de compatibilidad
+     * @return true si se cargó correctamente
+     */
+    public boolean cargarCompatibilidad(String rutaArchivo) {
+        tablasCompatibilidad.clear();
+
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(rutaArchivo), StandardCharsets.UTF_8))) {
+            String linea;
+            boolean primeraLinea = true;
+            Map<String, List<int[]>> filasPorTabla = new LinkedHashMap<>();
+
+            while ((linea = br.readLine()) != null) {
+                if (primeraLinea) {
+                    primeraLinea = false;
+                    continue;
+                }
+                if (linea.trim().isEmpty()) continue;
+
+                String[] valores = linea.split(",", -1);
+                if (valores.length < 11) continue;
+
+                try {
+                    int[] fila = new int[9];
+                    for (int i = 0; i < 9; i++) {
+                        fila[i] = Integer.parseInt(valores[i + 2].trim());
+                    }
+                    filasPorTabla.computeIfAbsent(valores[0].trim(), k -> new ArrayList<>()).add(fila);
+                } catch (NumberFormatException e) {
+                    System.err.println("Error: valor no válido en compatibilidad: " + linea);
+                }
+            }
+
+            for (Map.Entry<String, List<int[]>> entry : filasPorTabla.entrySet()) {
+                if (entry.getValue().size() == 9) {
+                    tablasCompatibilidad.put(entry.getKey(), entry.getValue().toArray(new int[9][]));
+                } else {
+                    System.err.println("Tabla de compatibilidad incompleta: " + entry.getKey());
+                }
+            }
+
+            System.out.println("Tablas de compatibilidad cargadas correctamente. Total: " + tablasCompatibilidad.size());
+            return true;
+
+        } catch (IOException e) {
+            System.err.println("Error al leer las tablas de compatibilidad: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Retorna la tabla de compatibilidad indicada (SUMA, RESTA, MULT, DIV, REL, LOG) o null si no existe.
+     */
+    public int[][] getTablaCompatibilidad(String nombre) {
+        return tablasCompatibilidad.get(nombre);
     }
 
     // ==================== MÉTODOS PARA PRODUCCIONES GRAMATICALES ====================
