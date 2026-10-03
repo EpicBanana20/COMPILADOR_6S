@@ -421,7 +421,7 @@ public class Parser {
             if (cimaPila.equals("814")) { // Insertar operando
                 pila.pop();
                 if (profundidadExpresion > 0 && ultimoTokenConsumido != null) {
-                    insertarOperando(ultimoTokenConsumido.lexema);
+                    insertarOperandoExpresion();
                 }
                 continue;
             }
@@ -933,8 +933,35 @@ public class Parser {
         this.erroresTiposPendientes = new ArrayList<>();
     }
 
+    // Operando dentro de la expresión: un identificador no declarado se cuenta como un temporal TVariant
+    private void insertarOperandoExpresion() {
+        Token t = ultimoTokenConsumido;
+        if (CODIGO_A_TIPO.containsKey(t.token) && !existeEnAmbitoOAncestro(t.lexema)) {
+            String temporal = nuevoTemporal("variant");
+            pilaOperandos.push(new Operando(t.lexema, temporal, "variant"));
+            logPilasExpresion.add("Linea " + t.linea + " - Inserción operando: " + t.lexema
+                + " (no declarado, " + temporal + ") -> Pila operandos " + formatoPila(pilaOperandos));
+        } else {
+            insertarOperando(t.lexema);
+        }
+    }
+
+    // Crea el siguiente temporal del tipo dado (un contador por tipo, global a todo el programa)
+    private String nuevoTemporal(String tipo) {
+        String nombreTipo = nombreTemporal(tipo);
+        int numero = contadoresTemporales.getOrDefault(nombreTipo, 0) + 1;
+        contadoresTemporales.put(nombreTipo, numero);
+        return nombreTipo + numero;
+    }
+
     private void insertarOperando(String valor) {
-        pilaOperandos.push(new Operando(valor, valor, tipoDeToken(ultimoTokenConsumido)));
+        String tipo = tipoDeToken(ultimoTokenConsumido);
+        // Un identificador no declarado no tiene tipo conocido: cuenta como variant
+        if (ultimoTokenConsumido != null && CODIGO_A_TIPO.containsKey(ultimoTokenConsumido.token)
+                && !existeEnAmbitoOAncestro(ultimoTokenConsumido.lexema)) {
+            tipo = "variant";
+        }
+        pilaOperandos.push(new Operando(valor, valor, tipo));
         int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
         logPilasExpresion.add("Linea " + linea + " - Inserción operando: " + valor
             + " -> Pila operandos " + formatoPila(pilaOperandos));
@@ -971,10 +998,7 @@ public class Parser {
         }
 
         String tipo = resolverTipo(operador, operandos);
-        String nombreTipo = nombreTemporal(tipo);
-        int numero = contadoresTemporales.getOrDefault(nombreTipo, 0) + 1;
-        contadoresTemporales.put(nombreTipo, numero);
-        String temporal = nombreTipo + numero;
+        String temporal = nuevoTemporal(tipo);
         cuadruplosActuales.add(operador + "," + String.join(",", valores) + (aridad == 1 ? "," : "") + "," + temporal);
         pilaOperandos.push(new Operando(prefijo, temporal, tipo));
     }
