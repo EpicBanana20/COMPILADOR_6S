@@ -29,6 +29,8 @@ public class Parser {
     private Simbolo funcionActual;
     private int contadorParametros;
     private Simbolo variableActual;
+    private String tipoRegPendiente;          // 'reg X' antes del id que se declara en 804
+    private boolean omitirDeclaracionPendiente; // el tipo reg no existe: la variable no se inserta
     private List<String> dimsBufferActual;
 
     // Prefijo de asignaciones (acciones 814-822)
@@ -260,6 +262,8 @@ public class Parser {
         this.variableActual = null;
         this.dimsBufferActual = new ArrayList<>();
         this.ultimoTokenConsumido = null;
+        this.tipoRegPendiente = null;
+        this.omitirDeclaracionPendiente = false;
         reiniciarExpresion();
         this.logPrefijos = new ArrayList<>();
         this.logPilasExpresion = new ArrayList<>();
@@ -311,22 +315,17 @@ public class Parser {
             if (cimaPila.equals("802")) {
                 pila.pop();
                 int ambitoPadreActual = pilaAmbitos.peek();
-                contadorAmbitos++;
-                int lineaCambio = (tokenActual != null) ? tokenActual.linea : 0;
-                pilaAmbitos.push(contadorAmbitos);
-                logAmbitos.add("Creación ámbito: [" + contadorAmbitos + "," + lineaCambio + "]");
-                logAmbitos.add("Pila -> " + formatoPilaAmbitos());
-                eventosAmbito.add(new int[] { contadorAmbitos, lineaCambio, 1 });
-
+                abrirAmbito(tokenActual);
                 if (ultimoIdConsumido != null) {
                     boolean duplicado = existeEnAmbito(ambitoPadreActual, ultimoIdConsumido.lexema);
                     if (duplicado) {
                         registrarErrorSemantico(546, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido,ambitoPadreActual);
                     }
+                    boolean esReg = "registro".equals(CODIGO_A_TIPO.get(ultimoIdConsumido.token));
                     Simbolo fun = new Simbolo(
                         ultimoIdConsumido.lexema,
-                        CODIGO_A_TIPO.get(ultimoIdConsumido.token),
-                        "fun",
+                        esReg ? "reg" : CODIGO_A_TIPO.get(ultimoIdConsumido.token),
+                        esReg ? "reg" : "fun",
                         ambitoPadreActual,
                         "", "0", "0",
                         String.valueOf(contadorAmbitos));
@@ -338,11 +337,40 @@ public class Parser {
             }
             if (cimaPila.equals("803")) {
                 pila.pop();
+                cerrarAmbito(tokenActual);
+                continue;
+            }
+            if (cimaPila.equals("823")) { // Inicio del for: crea el ámbito de la sentencia
+                pila.pop();
+                abrirAmbito(tokenActual);
+                continue;
+            }
+            if (cimaPila.equals("826")) { // Fin del cuerpo del for: elimina su ámbito
+                pila.pop();
+                cerrarAmbito(tokenActual);
+                continue;
+            }
+            if (cimaPila.equals("824") || cimaPila.equals("825")) { // Zona de declaración del for (824 abre, 825 cierra)
+                pila.pop();
+                boolean abre = cimaPila.equals("824");
+                areaDeclaracion = abre;
                 int lineaCambio = (tokenActual != null) ? tokenActual.linea : 0;
-                int idEliminado = pilaAmbitos.isEmpty() ? -1 : pilaAmbitos.pop();
-                logAmbitos.add("Eliminación ámbito: [" + idEliminado + "," + lineaCambio + "]");
-                logAmbitos.add("Pila -> " + formatoPilaAmbitos());
-                eventosAmbito.add(new int[] { idEliminado, lineaCambio, 0 });
+                logAreas.add("Linea " + lineaCambio + " - Area de declaración - " + (abre ? "True" : "False"));
+                logAreas.add("Linea " + lineaCambio + " - Area de ejecución - " + (abre ? "False" : "True"));
+                continue;
+            }
+            if (cimaPila.equals("827")) { // 'reg X' en una declaración var: X debe ser un reg declarado
+                pila.pop();
+                tipoRegPendiente = null;
+                omitirDeclaracionPendiente = false;
+                if (ultimoIdConsumido != null) {
+                    if (esRegistroDeclarado(ultimoIdConsumido.lexema)) {
+                        tipoRegPendiente = ultimoIdConsumido.lexema;
+                    } else {
+                        registrarErrorSemantico(545, "Variable no declarada: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido, pilaAmbitos.peek());
+                        omitirDeclaracionPendiente = true;
+                    }
+                }
                 continue;
             }
             if (cimaPila.equals("804")) {
@@ -355,11 +383,13 @@ public class Parser {
                     }
                     Simbolo var = new Simbolo(
                         ultimoIdConsumido.lexema,
-                        CODIGO_A_TIPO.get(ultimoIdConsumido.token),
-                        "var",
+                        tipoRegPendiente != null ? tipoRegPendiente : CODIGO_A_TIPO.get(ultimoIdConsumido.token),
+                        tipoRegPendiente != null ? "reg" : "var",
                         ambitoActual,
                         "", "0", "0", "");
-                    if (!duplicado) tablaSimbolos.insertar(var); // un duplicado solo reporta error, no cuenta
+                    if (!duplicado && !omitirDeclaracionPendiente) tablaSimbolos.insertar(var);
+                    tipoRegPendiente = null;
+                    omitirDeclaracionPendiente = false; // un duplicado solo reporta error, no cuenta
                     variableActual = var;
                     dimsBufferActual = new ArrayList<>();
                 }
@@ -881,6 +911,15 @@ public class Parser {
         return simbolosAmbito != null && simbolosAmbito.containsKey(id);
     }
 
+    private boolean esRegistroDeclarado(String id) {
+        for (int i = pilaAmbitos.size() - 1; i >= 0; i--) {
+            Map<String, Simbolo> simbolosAmbito = tablaSimbolos.getIndicePorAmbito().get(pilaAmbitos.get(i));
+            Simbolo s = (simbolosAmbito != null) ? simbolosAmbito.get(id) : null;
+            if (s != null && s.getClase().equals("reg") && s.getTipo().equals("reg")) return true;
+        }
+        return false;
+    }
+
     private boolean existeEnAmbitoOAncestro(String id) {
         for (int i = pilaAmbitos.size() - 1; i >= 0; i--) {
             if (existeEnAmbito(pilaAmbitos.get(i), id)) return true;
@@ -924,6 +963,23 @@ public class Parser {
 
     public List<String> getLogCuadruplos() {
         return logCuadruplos;
+    }
+
+    private void abrirAmbito(Token tokenActual) {
+        contadorAmbitos++;
+        int lineaCambio = (tokenActual != null) ? tokenActual.linea : 0;
+        pilaAmbitos.push(contadorAmbitos);
+        logAmbitos.add("Creación ámbito: [" + contadorAmbitos + "," + lineaCambio + "]");
+        logAmbitos.add("Pila -> " + formatoPilaAmbitos());
+        eventosAmbito.add(new int[] { contadorAmbitos, lineaCambio, 1 });
+    }
+
+    private void cerrarAmbito(Token tokenActual) {
+        int lineaCambio = (tokenActual != null) ? tokenActual.linea : 0;
+        int idEliminado = pilaAmbitos.isEmpty() ? -1 : pilaAmbitos.pop();
+        logAmbitos.add("Eliminación ámbito: [" + idEliminado + "," + lineaCambio + "]");
+        logAmbitos.add("Pila -> " + formatoPilaAmbitos());
+        eventosAmbito.add(new int[] { idEliminado, lineaCambio, 0 });
     }
 
     public List<Object[]> getResumenTemporales() {
@@ -1032,7 +1088,7 @@ public class Parser {
                 erroresTiposPendientes.add(new Object[] {
                     "555",
                     "Asignación incompatible (" + operador + "): " + etiquetaTipo(tipoDestino) + " no puede recibir " + etiquetaTipo(tipoValor),
-                    operador, "Semántico", String.valueOf(linea) });
+                    operandos[0].valor + " " + operador + " " + operandos[1].valor, "Semántico", String.valueOf(linea) });
             }
             cuadruplosActuales.add(operador + "," + String.join(",", valores));
             pilaOperandos.push(new Operando(prefijo, operandos[0].valor, operandos[0].tipo));
@@ -1094,7 +1150,7 @@ public class Parser {
                 String.valueOf(celda),
                 "Tipos incompatibles para '" + operador + "' (" + nombre + "): "
                     + etiquetaTipo(operandos[0].tipo) + " y " + etiquetaTipo(operandos[1].tipo),
-                operador, "Semántico", String.valueOf(linea) });
+                operandos[0].valor + " " + operador + " " + operandos[1].valor, "Semántico", String.valueOf(linea) });
             return "variant";
         }
         return tipoDeCodigo(celda);

@@ -35,7 +35,7 @@ public class CrearXLS {
 
     public void ejecutar() {
         FileDialog dialogo = new FileDialog((Frame) null, "Guardar reporte Léxico en Excel", FileDialog.SAVE);
-        dialogo.setFile("Amb_MezaAlex_1.xlsx"); 
+        dialogo.setFile("Sem1_MezaAlex_1.xlsx"); 
         dialogo.setVisible(true);
 
         String dir = dialogo.getDirectory();
@@ -102,19 +102,17 @@ public class CrearXLS {
             Sheet sheetTablaSimbolos = workbook.createSheet("Tabla de Simbolos");
             escribirTablaSimbolos(sheetTablaSimbolos, tablaSimbolos, estiloCentrado, estiloDestacado);
 
-            // --- 7. Hoja de Temporales ---
+            // --- 7. Hoja de Semantica 1 (temporales por asignación) ---
             org.apache.poi.ss.usermodel.Font fontEncabezado = workbook.createFont();
             fontEncabezado.setBold(true);
             CellStyle estiloEncabezado = workbook.createCellStyle();
             estiloEncabezado.cloneStyleFrom(estiloCentrado);
             estiloEncabezado.setFont(fontEncabezado);
-            estiloEncabezado.setFillForegroundColor(org.apache.poi.ss.usermodel.IndexedColors.LAVENDER.getIndex());
-            estiloEncabezado.setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
             estiloEncabezado.setBorderTop(org.apache.poi.ss.usermodel.BorderStyle.THIN);
             estiloEncabezado.setBorderBottom(org.apache.poi.ss.usermodel.BorderStyle.THIN);
             estiloEncabezado.setBorderLeft(org.apache.poi.ss.usermodel.BorderStyle.THIN);
             estiloEncabezado.setBorderRight(org.apache.poi.ss.usermodel.BorderStyle.THIN);
-            Sheet sheetTemporales = workbook.createSheet("Temporales");
+            Sheet sheetTemporales = workbook.createSheet("Semantica 1");
             escribirTablaTemporales(sheetTemporales, resumenTemporales, estiloEncabezado, estiloCentrado);
 
             // Guardamos el archivo físicamente
