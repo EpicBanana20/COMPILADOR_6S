@@ -51,11 +51,12 @@ public class CrearXLS {
             TablaSimbolos tablaSimbolos = parser != null ? parser.getTablaSimbolos() : new TablaSimbolos();
             Map<Integer, Integer> erroresPorAmbito = parser != null ? parser.getErroresPorAmbito() : new java.util.LinkedHashMap<>();
             List<int[]> eventosAmbito = parser != null ? parser.getEventosAmbito() : new ArrayList<>();
-            generarExcel(rutaAbsoluta, gui.getModeloTokens(), gui.getModeloErrores(), gui.getModeloPila(), contadoresSintaxis, totalErroresSintacticos, tablaSimbolos, erroresPorAmbito, eventosAmbito);
+            List<Object[]> resumenTemporales = parser != null ? parser.getResumenTemporales() : new ArrayList<>();
+            generarExcel(rutaAbsoluta, gui.getModeloTokens(), gui.getModeloErrores(), gui.getModeloPila(), contadoresSintaxis, totalErroresSintacticos, tablaSimbolos, erroresPorAmbito, eventosAmbito, resumenTemporales);
         }
     }
 
-    private void generarExcel(String rutaAbsoluta, DefaultTableModel modeloTokens, DefaultTableModel modeloErrores, DefaultTableModel modeloContadores, Map<String, Integer> contadoresSintaxis, int totalErroresSintacticos, TablaSimbolos tablaSimbolos, Map<Integer, Integer> erroresPorAmbito, List<int[]> eventosAmbito) {
+    private void generarExcel(String rutaAbsoluta, DefaultTableModel modeloTokens, DefaultTableModel modeloErrores, DefaultTableModel modeloContadores, Map<String, Integer> contadoresSintaxis, int totalErroresSintacticos, TablaSimbolos tablaSimbolos, Map<Integer, Integer> erroresPorAmbito, List<int[]> eventosAmbito, List<Object[]> resumenTemporales) {
         try (Workbook workbook = new XSSFWorkbook()) {
 
             // =========================================================
@@ -100,6 +101,21 @@ public class CrearXLS {
             // --- 6. Hoja de Tabla de Simbolos ---
             Sheet sheetTablaSimbolos = workbook.createSheet("Tabla de Simbolos");
             escribirTablaSimbolos(sheetTablaSimbolos, tablaSimbolos, estiloCentrado, estiloDestacado);
+
+            // --- 7. Hoja de Temporales ---
+            org.apache.poi.ss.usermodel.Font fontEncabezado = workbook.createFont();
+            fontEncabezado.setBold(true);
+            CellStyle estiloEncabezado = workbook.createCellStyle();
+            estiloEncabezado.cloneStyleFrom(estiloCentrado);
+            estiloEncabezado.setFont(fontEncabezado);
+            estiloEncabezado.setFillForegroundColor(org.apache.poi.ss.usermodel.IndexedColors.LAVENDER.getIndex());
+            estiloEncabezado.setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
+            estiloEncabezado.setBorderTop(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            estiloEncabezado.setBorderBottom(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            estiloEncabezado.setBorderLeft(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            estiloEncabezado.setBorderRight(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            Sheet sheetTemporales = workbook.createSheet("Temporales");
+            escribirTablaTemporales(sheetTemporales, resumenTemporales, estiloEncabezado, estiloCentrado);
 
             // Guardamos el archivo físicamente
             try (FileOutputStream fileOut = new FileOutputStream(rutaAbsoluta)) {
@@ -443,5 +459,57 @@ public class CrearXLS {
             c.setCellValue(String.valueOf(totales[i]));
             c.setCellStyle(estilo);
         }
+    }
+
+    // Hoja "Temporales": una fila por asignación con el conteo de temporales por tipo, la asignación y sus errores
+    private void escribirTablaTemporales(Sheet sheet, List<Object[]> resumen, CellStyle estiloEncabezado, CellStyle estilo) {
+        String[] headers = {"Linea", "TBin", "TDec", "TOct", "THex", "TReal", "Texp", "TCadena", "TBoolean", "TVariant", "Asignaciones", "Errores"};
+        Row headerRow = sheet.createRow(0);
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(estiloEncabezado);
+        }
+        sheet.setColumnWidth(10, 30 * 256);
+
+        int[] totales = new int[9];
+        int totalErrores = 0;
+        int filaExcel = 1;
+        for (Object[] fila : resumen) {
+            Row row = sheet.createRow(filaExcel++);
+            Cell cLinea = row.createCell(0);
+            cLinea.setCellValue((Integer) fila[0]);
+            cLinea.setCellStyle(estilo);
+            int[] conteos = (int[]) fila[1];
+            for (int i = 0; i < conteos.length; i++) {
+                Cell c = row.createCell(i + 1);
+                c.setCellValue(conteos[i]);
+                c.setCellStyle(estilo);
+                totales[i] += conteos[i];
+            }
+            Cell cAsig = row.createCell(10);
+            cAsig.setCellValue((String) fila[2]);
+            cAsig.setCellStyle(estilo);
+            Cell cErr = row.createCell(11);
+            cErr.setCellValue((Integer) fila[3]);
+            cErr.setCellStyle(estilo);
+            totalErrores += (Integer) fila[3];
+        }
+
+        Row totalRow = sheet.createRow(filaExcel);
+        Cell cLabel = totalRow.createCell(0);
+        cLabel.setCellValue("Totales");
+        cLabel.setCellStyle(estilo);
+        for (int i = 0; i < totales.length; i++) {
+            Cell c = totalRow.createCell(i + 1);
+            c.setCellValue(totales[i]);
+            c.setCellStyle(estilo);
+        }
+        Cell cAsigTotal = totalRow.createCell(10);
+        cAsigTotal.setCellValue(resumen.size());
+        cAsigTotal.setCellStyle(estilo);
+        Cell cErrTotal = totalRow.createCell(11);
+        cErrTotal.setCellValue(totalErrores);
+        cErrTotal.setCellStyle(estilo);
     }
 }

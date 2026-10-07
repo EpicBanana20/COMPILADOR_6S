@@ -42,6 +42,7 @@ public class Parser {
     private List<String> logPrefijos;
     private List<String> logPilasExpresion;
     private List<String> logCuadruplos;
+    private List<Object[]> resumenTemporales; // por asignación: línea, conteo por tipo de temporal, texto de asignación, errores de tipos
     private List<String> cuadruplosActuales;
     private Map<String, Integer> contadoresTemporales; // un contador por tipo de temporal, global a todo el programa
     private Map<String, Integer> contadoresTemporalesInicio;
@@ -234,6 +235,7 @@ public class Parser {
         this.logPrefijos = new ArrayList<>();
         this.logPilasExpresion = new ArrayList<>();
         this.logCuadruplos = new ArrayList<>();
+        this.resumenTemporales = new ArrayList<>();
         this.contadoresTemporales = new LinkedHashMap<>();
     }
 
@@ -262,6 +264,7 @@ public class Parser {
         this.logPrefijos = new ArrayList<>();
         this.logPilasExpresion = new ArrayList<>();
         this.logCuadruplos = new ArrayList<>();
+        this.resumenTemporales = new ArrayList<>();
         this.contadoresTemporales = new LinkedHashMap<>();
 
         pila.push("$");
@@ -496,6 +499,7 @@ public class Parser {
                         logPilasExpresion.add(lineaPrefijo);
                         logCuadruplos.add("Linea " + lineaApertura);
                         logCuadruplos.addAll(cuadruplosActuales);
+                        registrarResumenTemporales();
                         for (Object[] fila : erroresTiposPendientes) {
                             if (gui != null) gui.getModeloErrores().addRow(fila);
                         }
@@ -918,6 +922,30 @@ public class Parser {
         return logCuadruplos;
     }
 
+    public List<Object[]> getResumenTemporales() {
+        return resumenTemporales;
+    }
+
+    private static final String[] NOMBRES_TEMPORALES = { "TBin", "TDec", "TOct", "THex", "TReal", "Texp", "TCadena", "TBoolean", "TVariant" };
+
+    // Fila de la hoja Temporales: {línea, conteos por tipo (int[9]), "destino -> TTipo", errores de tipos}
+    private void registrarResumenTemporales() {
+        int[] conteos = new int[NOMBRES_TEMPORALES.length];
+        for (int i = 0; i < conteos.length; i++) {
+            conteos[i] = contadoresTemporales.getOrDefault(NOMBRES_TEMPORALES[i], 0)
+                - contadoresTemporalesInicio.getOrDefault(NOMBRES_TEMPORALES[i], 0);
+        }
+        String asignacion = "";
+        for (int i = cuadruplosActuales.size() - 1; i >= 0; i--) {
+            String[] partes = cuadruplosActuales.get(i).split(",", -1);
+            if (partes.length == 3 && esAsignacion(partes[0])) {
+                asignacion = partes[1] + " -> " + partes[2].replaceFirst("^(T[A-Za-z]+?)\\d+$", "$1");
+                break;
+            }
+        }
+        resumenTemporales.add(new Object[] { lineaApertura, conteos, asignacion, erroresTiposPendientes.size() });
+    }
+
     public List<String> getLogPilasExpresion() {
         return logPilasExpresion;
     }
@@ -992,6 +1020,16 @@ public class Parser {
         String prefijo = operador + " " + String.join(" ", prefijos);
 
         if (aridad == 2 && esAsignacion(operador)) {
+            // Una variable solo recibe valores de su mismo tipo; variant (p. ej. no declarada) no se valida
+            String tipoDestino = operandos[0].tipo;
+            String tipoValor = operandos[1].tipo;
+            if (!tipoDestino.equals("variant") && !tipoValor.equals("variant") && !tipoDestino.equals(tipoValor)) {
+                int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
+                erroresTiposPendientes.add(new Object[] {
+                    "555",
+                    "Asignación incompatible (" + operador + "): " + etiquetaTipo(tipoDestino) + " no puede recibir " + etiquetaTipo(tipoValor),
+                    operador, "Semántico", String.valueOf(linea) });
+            }
             cuadruplosActuales.add(operador + "," + String.join(",", valores));
             pilaOperandos.push(new Operando(prefijo, operandos[0].valor, operandos[0].tipo));
             return;
@@ -1020,12 +1058,15 @@ public class Parser {
         switch (operador) {
             case "+": clave = "SUMA"; nombre = "suma"; break;
             case "-": clave = "RESTA"; nombre = "resta"; break;
-            case "*": case "%": case "#": case "^": case "<<": case ">>": case ">>>":
-                clave = "MULT"; nombre = "multiplicación"; break;
+            case "*": clave = "MULT"; nombre = "multiplicación"; break;
+            case "%": case "^": case "<<": case ">>": case ">>>":
+                clave = "RESTO"; nombre = "resto/desplazamiento"; break;
             case "/": clave = "DIV"; nombre = "división"; break;
-            case "<": case ">": case "<=": case ">=": case "==": case "!=":
+            case "<": case ">": case "<=": case ">=":
                 clave = "REL"; nombre = "relacional"; break;
-            case "&&": case "||": case "&": case "|":
+            case "==": case "!=":
+                clave = "REL2"; nombre = "igualdad"; break;
+            case "&&": case "||": case "&": case "|": case "#":
                 clave = "LOG"; nombre = "lógico"; break;
             default:
                 clave = null; nombre = null; break;
