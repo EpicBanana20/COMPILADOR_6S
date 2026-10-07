@@ -319,7 +319,8 @@ public class Parser {
                 eventosAmbito.add(new int[] { contadorAmbitos, lineaCambio, 1 });
 
                 if (ultimoIdConsumido != null) {
-                    if (existeEnAmbito(ambitoPadreActual, ultimoIdConsumido.lexema)) {
+                    boolean duplicado = existeEnAmbito(ambitoPadreActual, ultimoIdConsumido.lexema);
+                    if (duplicado) {
                         registrarErrorSemantico(546, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido,ambitoPadreActual);
                     }
                     Simbolo fun = new Simbolo(
@@ -329,7 +330,7 @@ public class Parser {
                         ambitoPadreActual,
                         "", "0", "0",
                         String.valueOf(contadorAmbitos));
-                    tablaSimbolos.insertar(fun);
+                    if (!duplicado) tablaSimbolos.insertar(fun); // un duplicado solo reporta error, no cuenta
                     funcionActual = fun;
                     contadorParametros = 0;
                 }
@@ -348,7 +349,8 @@ public class Parser {
                 pila.pop();
                 if (ultimoIdConsumido != null) {
                     int ambitoActual = pilaAmbitos.peek();
-                    if (existeEnAmbito(ambitoActual, ultimoIdConsumido.lexema)) {
+                    boolean duplicado = existeEnAmbito(ambitoActual, ultimoIdConsumido.lexema);
+                    if (duplicado) {
                         registrarErrorSemantico(546, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido,ambitoActual);
                     }
                     Simbolo var = new Simbolo(
@@ -357,7 +359,7 @@ public class Parser {
                         "var",
                         ambitoActual,
                         "", "0", "0", "");
-                    tablaSimbolos.insertar(var);
+                    if (!duplicado) tablaSimbolos.insertar(var); // un duplicado solo reporta error, no cuenta
                     variableActual = var;
                     dimsBufferActual = new ArrayList<>();
                 }
@@ -367,7 +369,8 @@ public class Parser {
                 pila.pop();
                 if (ultimoIdConsumido != null) {
                     int ambitoActual = pilaAmbitos.peek();
-                    if (existeEnAmbito(ambitoActual, ultimoIdConsumido.lexema)) {
+                    boolean duplicado = existeEnAmbito(ambitoActual, ultimoIdConsumido.lexema);
+                    if (duplicado) {
                         registrarErrorSemantico(546, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido,ambitoActual);
                     }
                     Simbolo constante = new Simbolo(
@@ -376,7 +379,7 @@ public class Parser {
                         "const",
                         ambitoActual,
                         "", "0", "0", "");
-                    tablaSimbolos.insertar(constante);
+                    if (!duplicado) tablaSimbolos.insertar(constante); // un duplicado solo reporta error, no cuenta
                 }
                 continue;
             }
@@ -394,7 +397,8 @@ public class Parser {
                 pila.pop();
                 if (funcionActual != null && ultimoIdConsumido != null) {
                     int ambitoActual = pilaAmbitos.peek();
-                    if (existeEnAmbito(ambitoActual, ultimoIdConsumido.lexema)) {
+                    boolean duplicado = existeEnAmbito(ambitoActual, ultimoIdConsumido.lexema);
+                    if (duplicado) {
                         registrarErrorSemantico(546, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido,ambitoActual);
                     }
                     contadorParametros++;
@@ -406,7 +410,7 @@ public class Parser {
                         "", "0",
                         String.valueOf(contadorParametros),
                         funcionActual.getId());
-                    tablaSimbolos.insertar(par);
+                    if (!duplicado) tablaSimbolos.insertar(par); // un duplicado solo reporta error, no cuenta
                     funcionActual.setNoPar(String.valueOf(contadorParametros));
                 }
                 continue;
