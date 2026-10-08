@@ -101,7 +101,7 @@ Codigo,No_Terminal,Produccion
 100,STATU,while ( OR ) STATU
 101,STATU,do STATU while ( OR )
 102,STATU,return OR
-103,STATU,for 823 ( 824 id 804 K6 K4 { STATU K3 826 }
+103,STATU,for 823 ( 824 id 804 K6 K4 STATU 826
 104,STATU,switch ( OR ) { case OR : STATU K3 break K5 }
 105,STATU,EPSILON
 106,K1,coma OR K1
