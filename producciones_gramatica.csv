@@ -101,7 +101,7 @@ Codigo,No_Terminal,Produccion
 100,STATU,while ( OR ) STATU
 101,STATU,do STATU while ( OR )
 102,STATU,return OR
-103,STATU,for 823 ( 824 id 804 K6 K4 STATU 826
+103,STATU,for 823 ( 824 OR K1 K4 ) STATU 826
 104,STATU,switch ( OR ) { case OR : STATU K3 break K5 }
 105,STATU,EPSILON
 106,K1,coma OR K1
@@ -111,8 +111,8 @@ Codigo,No_Terminal,Produccion
 110,K2,EPSILON
 111,K3,; STATU K3
 112,K3,EPSILON
-113,K4,825 ; OR ; OR )
-114,K4,825 : OR )
+113,K4,825 ; STATU ; OR K1
+114,K4,825 : OR
 115,K5,case OR : STATU K3 break K5
 116,K5,default : STATU K3
 117,K5,EPSILON
@@ -134,5 +134,3 @@ Codigo,No_Terminal,Produccion
 133,FUNCION,inc ( OR )
 134,FUNCION,dec ( OR )
 135,FUNCION,sqr ( OR )
-136,K6,821 ASIG OR 816 822
-137,K6,EPSILON

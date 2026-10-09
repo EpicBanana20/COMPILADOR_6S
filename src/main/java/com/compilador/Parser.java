@@ -16,6 +16,7 @@ public class Parser {
     private List<String> erroresSintacticos;
     private Map<String, Integer> contadoresDiagramasPrincipales;
     private boolean areaDeclaracion;
+    private boolean enCabeceraFor;  // entre 824 y 825: asignar a un id no declarado lo declara en el ámbito del for
     private List<String> logAreas;
     private Stack<Integer> pilaAmbitos;
     private int contadorAmbitos;
@@ -264,6 +265,7 @@ public class Parser {
         this.ultimoTokenConsumido = null;
         this.tipoRegPendiente = null;
         this.omitirDeclaracionPendiente = false;
+        this.enCabeceraFor = false;
         reiniciarExpresion();
         this.logPrefijos = new ArrayList<>();
         this.logPilasExpresion = new ArrayList<>();
@@ -354,6 +356,7 @@ public class Parser {
                 pila.pop();
                 boolean abre = cimaPila.equals("824");
                 areaDeclaracion = abre;
+                enCabeceraFor = abre;
                 int lineaCambio = (tokenActual != null) ? tokenActual.linea : 0;
                 logAreas.add("Linea " + lineaCambio + " - Area de declaración - " + (abre ? "True" : "False"));
                 logAreas.add("Linea " + lineaCambio + " - Area de ejecución - " + (abre ? "False" : "True"));
@@ -375,24 +378,7 @@ public class Parser {
             }
             if (cimaPila.equals("804")) {
                 pila.pop();
-                if (ultimoIdConsumido != null) {
-                    int ambitoActual = pilaAmbitos.peek();
-                    boolean duplicado = existeEnAmbito(ambitoActual, ultimoIdConsumido.lexema);
-                    if (duplicado) {
-                        registrarErrorSemantico(546, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido,ambitoActual);
-                    }
-                    Simbolo var = new Simbolo(
-                        ultimoIdConsumido.lexema,
-                        tipoRegPendiente != null ? tipoRegPendiente : CODIGO_A_TIPO.get(ultimoIdConsumido.token),
-                        tipoRegPendiente != null ? "reg" : "var",
-                        ambitoActual,
-                        "", "0", "0", "");
-                    if (!duplicado && !omitirDeclaracionPendiente) tablaSimbolos.insertar(var);
-                    tipoRegPendiente = null;
-                    omitirDeclaracionPendiente = false; // un duplicado solo reporta error, no cuenta
-                    variableActual = var;
-                    dimsBufferActual = new ArrayList<>();
-                }
+                declararVariable();
                 continue;
             }
             if (cimaPila.equals("813")) {
@@ -447,8 +433,17 @@ public class Parser {
             }
             if (cimaPila.equals("812")) {
                 pila.pop();
-                if (ultimoIdConsumido != null && !existeEnAmbitoOAncestro(ultimoIdConsumido.lexema)) {
-                    registrarErrorSemantico(545, "Variable no declarada: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido, pilaAmbitos.isEmpty() ? -1 : pilaAmbitos.peek());
+                if (ultimoIdConsumido != null) {
+                    boolean asignaEnFor = enCabeceraFor && tokenActual != null && tokenActual.lexema.equals("=");
+                    if (asignaEnFor) {
+                        // for (#Dx = 0; ...): la asignación inicial declara una variable local al for,
+                        // aunque exista una con ese nombre en un ámbito superior
+                        if (!existeEnAmbito(pilaAmbitos.peek(), ultimoIdConsumido.lexema)) {
+                            declararVariable();
+                        }
+                    } else if (!existeEnAmbitoOAncestro(ultimoIdConsumido.lexema)) {
+                        registrarErrorSemantico(545, "Variable no declarada: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido, pilaAmbitos.isEmpty() ? -1 : pilaAmbitos.peek());
+                    }
                 }
                 continue;
             }
@@ -946,6 +941,27 @@ public class Parser {
 
     public List<int[]> getEventosAmbito() {
         return eventosAmbito;
+    }
+
+    /** Declara ultimoIdConsumido en el ámbito actual (acción 804 y declaración implícita en la cabecera del for). */
+    private void declararVariable() {
+        if (ultimoIdConsumido == null) return;
+        int ambitoActual = pilaAmbitos.peek();
+        boolean duplicado = existeEnAmbito(ambitoActual, ultimoIdConsumido.lexema);
+        if (duplicado) {
+            registrarErrorSemantico(546, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido,ambitoActual);
+        }
+        Simbolo var = new Simbolo(
+            ultimoIdConsumido.lexema,
+            tipoRegPendiente != null ? tipoRegPendiente : CODIGO_A_TIPO.get(ultimoIdConsumido.token),
+            tipoRegPendiente != null ? "reg" : "var",
+            ambitoActual,
+            "", "0", "0", "");
+        if (!duplicado && !omitirDeclaracionPendiente) tablaSimbolos.insertar(var);
+        tipoRegPendiente = null;
+        omitirDeclaracionPendiente = false; // un duplicado solo reporta error, no cuenta
+        variableActual = var;
+        dimsBufferActual = new ArrayList<>();
     }
 
     private String formatoPilaAmbitos() {
