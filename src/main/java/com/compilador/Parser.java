@@ -56,6 +56,7 @@ public class Parser {
     private Object[] asignacionPendiente;   // {regla, descripción, aceptada, lexema} de la última asignación reducida
     private int reglaCondicion;             // regla de la condición abierta (1010-1013)
     private String palabraCondicion;        // if / elseif / while / do-while
+    private Stack<ContextoArreglo> pilaContextosArreglo = new Stack<>(); // accesos id[...] en curso (reglas 1030-1050)
 
     private static final Map<String, String> CODIGO_A_TOKEN = new LinkedHashMap<>();
 
@@ -207,6 +208,23 @@ public class Parser {
         }
     }
 
+    // Un índice de un acceso a arreglo: texto, tipo de la expresión y valor si es una constante calculable
+    private static class IndiceArreglo {
+        String texto;
+        String tipo;
+        Long valor;
+    }
+
+    // Un acceso id[i1, i2, ...] mientras se analiza
+    private static class ContextoArreglo {
+        Token id;
+        int posId;
+        List<IndiceArreglo> indices = new ArrayList<>();
+        int inicioIndice;
+        boolean indicePropio;                 // el índice abrió su propia expresión (fuera de una asignación o condición)
+        int operandosAlAbrir;
+    }
+
     public static class Token {
         public String token;
         public String lexema;
@@ -280,6 +298,7 @@ public class Parser {
         this.contadoresTemporales = new LinkedHashMap<>();
         this.registroSemantica2 = new ArrayList<>();
         this.asignacionPendiente = null;
+        this.pilaContextosArreglo = new Stack<>();
 
         pila.push("$");
         pila.push("PROGRAMA");
@@ -553,6 +572,62 @@ public class Parser {
                         contadoresTemporales = contadoresTemporalesInicio;
                     }
                     reiniciarExpresion();
+                }
+                continue;
+            }
+
+            // ==================== SEMÁNTICA 2: LISTAS DE ARREGLO (833-836) ====================
+            // 835 abre el acceso id[...], 833/834 abren y cierran cada índice, 836 cierra el acceso y evalúa las reglas 1030-1050.
+            if (cimaPila.equals("835")) {
+                pila.pop();
+                ContextoArreglo ctx = new ContextoArreglo();
+                ctx.posId = posicionActual - 1;
+                ctx.id = (ctx.posId >= 0 && ctx.posId < tokens.size()) ? tokens.get(ctx.posId) : ultimoIdConsumido;
+                pilaContextosArreglo.push(ctx);
+                continue;
+            }
+            if (cimaPila.equals("833")) {
+                pila.pop();
+                if (!pilaContextosArreglo.isEmpty()) {
+                    ContextoArreglo ctx = pilaContextosArreglo.peek();
+                    ctx.inicioIndice = posicionActual;
+                    if (profundidadExpresion == 0) {
+                        ctx.indicePropio = true;
+                        profundidadExpresion++;
+                    } else {
+                        ctx.indicePropio = false;
+                        ctx.operandosAlAbrir = pilaOperandos.size();
+                    }
+                }
+                continue;
+            }
+            if (cimaPila.equals("834")) {
+                pila.pop();
+                if (!pilaContextosArreglo.isEmpty()) {
+                    ContextoArreglo ctx = pilaContextosArreglo.peek();
+                    IndiceArreglo indice = new IndiceArreglo();
+                    indice.texto = textoTokens(ctx.inicioIndice, posicionActual - 1);
+                    indice.valor = valorConstanteUnica(ctx.inicioIndice, posicionActual - 1);
+                    if (ctx.indicePropio) {
+                        profundidadExpresion--;
+                        indice.tipo = (pilaOperandos.size() == 1) ? pilaOperandos.peek().tipo : "variant";
+                        for (Object[] fila : erroresTiposPendientes) {
+                            if (gui != null) gui.getModeloErrores().addRow(fila);
+                        }
+                        reiniciarExpresion();
+                    } else {
+                        indice.tipo = (pilaOperandos.size() > ctx.operandosAlAbrir) ? pilaOperandos.peek().tipo : "variant";
+                        // El índice no es operando de la expresión que lo contiene: solo queda el arreglo
+                        while (pilaOperandos.size() > ctx.operandosAlAbrir) pilaOperandos.pop();
+                    }
+                    ctx.indices.add(indice);
+                }
+                continue;
+            }
+            if (cimaPila.equals("836")) {
+                pila.pop();
+                if (!pilaContextosArreglo.isEmpty()) {
+                    evaluarAccesoArreglo(pilaContextosArreglo.pop());
                 }
                 continue;
             }
@@ -1171,6 +1246,97 @@ public class Parser {
         String temporal = nuevoTemporal(tipo);
         cuadruplosActuales.add(operador + "," + String.join(",", valores) + (aridad == 1 ? "," : "") + "," + temporal);
         pilaOperandos.push(new Operando(prefijo, temporal, tipo));
+    }
+
+    // Reglas 1030 (dimensiones), 1040 (índice entero) y 1050 (rango) de un acceso id[i1, i2, ...]
+    private void evaluarAccesoArreglo(ContextoArreglo ctx) {
+        if (ctx.id == null) return;
+        Simbolo simbolo = buscarSimbolo(ctx.id.lexema);
+        if (simbolo == null) return; // no declarado: ya lo reporta la Semántica 1
+
+        int usadas = ctx.indices.size();
+        int declaradas = 0;
+        List<Integer> tamanos = new ArrayList<>();
+        if ("arr".equals(simbolo.getClase()) && simbolo.getTarr() != null && !simbolo.getTarr().isEmpty()) {
+            for (String dim : simbolo.getTarr().split(",")) {
+                try {
+                    tamanos.add(Integer.parseInt(dim.trim()));
+                } catch (NumberFormatException e) {
+                    tamanos.add(null);
+                }
+            }
+            declaradas = tamanos.size();
+        }
+        String acceso = textoTokens(ctx.posId, posicionActual); // incluye el ']' que aún no se consumió
+        int linea = ctx.id.linea;
+
+        registrarSemantica2(linea, 1030,
+            "Lista de arreglo: dimensiones usadas " + usadas + ", declaradas " + declaradas + ".", usadas == declaradas, acceso);
+        // Jerarquía 1030 > 1040 > 1050: si una regla falla, las siguientes ya no se evalúan
+        if (usadas != declaradas || declaradas == 0) return;
+
+        String malIndice = null;
+        for (IndiceArreglo i : ctx.indices) {
+            boolean entero = i.tipo.equals("dec") || i.tipo.equals("bin") || i.tipo.equals("oct")
+                || i.tipo.equals("hex") || i.tipo.equals("variant");
+            if (!entero) {
+                malIndice = "el indice " + i.texto + " debe ser entero, es " + etiquetaTipo(i.tipo);
+                break;
+            }
+        }
+        registrarSemantica2(linea, 1040,
+            malIndice == null ? "Lista de arreglo: los indices son enteros." : "Lista de arreglo: " + malIndice + ".",
+            malIndice == null, acceso);
+        if (malIndice != null) return;
+
+        String fuera = null;
+        for (int d = 0; d < Math.min(usadas, declaradas) && fuera == null; d++) {
+            IndiceArreglo i = ctx.indices.get(d);
+            Integer tamano = tamanos.get(d);
+            if (i.valor != null && tamano != null && (i.valor < 0 || i.valor >= tamano)) {
+                fuera = "el indice " + i.valor + " de la dimension " + (d + 1) + " esta fuera del rango 0.." + (tamano - 1);
+            }
+        }
+        boolean sinVerificar = false;
+        for (int d = 0; d < Math.min(usadas, declaradas); d++) {
+            if (ctx.indices.get(d).valor == null) sinVerificar = true;
+        }
+        String okDesc = sinVerificar
+            ? "Lista de arreglo: indices constantes dentro del rango declarado (los demas no se validan en compilacion)."
+            : "Lista de arreglo: los indices estan dentro del rango declarado.";
+        registrarSemantica2(linea, 1050,
+            fuera == null ? okDesc : "Lista de arreglo: " + fuera + ".",
+            fuera == null, acceso);
+    }
+
+    private Simbolo buscarSimbolo(String id) {
+        for (int i = pilaAmbitos.size() - 1; i >= 0; i--) {
+            Map<String, Simbolo> simbolosAmbito = tablaSimbolos.getIndicePorAmbito().get(pilaAmbitos.get(i));
+            if (simbolosAmbito != null && simbolosAmbito.containsKey(id)) return simbolosAmbito.get(id);
+        }
+        return null;
+    }
+
+    // Lexemas de los tokens desde 'desde' hasta 'hasta' (ambos incluidos), pegados
+    private String textoTokens(int desde, int hasta) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = Math.max(desde, 0); i <= hasta && i < tokens.size(); i++) {
+            sb.append(tokens.get(i).lexema);
+        }
+        return sb.toString();
+    }
+
+    // Valor del índice solo si es una única constante decimal (3, 69...). Una expresión como 4+70 genera un
+    // temporal y su valor no se conoce en compilación, así que no se calcula; devuelve null.
+    private Long valorConstanteUnica(int desde, int hasta) {
+        if (desde != hasta || desde < 0 || desde >= tokens.size()) return null;
+        Token t = tokens.get(desde);
+        if (!t.token.equals("-55")) return null;
+        try {
+            return Long.parseLong(t.lexema);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     public List<Object[]> getRegistroSemantica2() {

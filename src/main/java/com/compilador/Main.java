@@ -45,8 +45,6 @@ public class Main {
             ventana.getBtnCompilar().addActionListener(e -> {
                 logicaCompilar.ejecutar();
                 parser.ejecutar(logicaCompilar.getTokensAnalizados());
-                System.out.println("\n=== PREFIJOS ===");
-                parser.getLogPrefijos().forEach(System.out::println);
             });
 
             // CREACIÓN DEL EXCEL
