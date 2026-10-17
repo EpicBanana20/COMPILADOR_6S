@@ -438,7 +438,10 @@ public class Parser {
                     if (asignaEnFor) {
                         // for (#Dx = 0; ...): la asignación inicial declara una variable local al for,
                         // aunque exista una con ese nombre en un ámbito superior
-                        if (!existeEnAmbito(pilaAmbitos.peek(), ultimoIdConsumido.lexema)) {
+                        int ambitoFor = pilaAmbitos.peek();
+                        if (existeEnAmbito(ambitoFor, ultimoIdConsumido.lexema)) {
+                            registrarErrorSemantico(546, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido, ambitoFor);
+                        } else {
                             declararVariable();
                         }
                     } else if (!existeEnAmbitoOAncestro(ultimoIdConsumido.lexema)) {
