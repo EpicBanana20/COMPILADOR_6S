@@ -53,13 +53,9 @@ public class Main {
             CrearXLS logicaExcel = new CrearXLS(ventana, parser);
             ventana.getBtnCrearXls().addActionListener(e -> logicaExcel.ejecutar());
 
-            // CREACIÓN DEL TXT (Prefijos de expresiones)
-            CrearTxtPrefijo logicaTxtPrefijo = new CrearTxtPrefijo(ventana, parser);
-            ventana.getBtnCrearTxtPrefijo().addActionListener(e -> logicaTxtPrefijo.ejecutar());
-
-            // CREACIÓN DEL TXT (Temporales con tipo / cuádruplos)
-            CrearTxtTemporales logicaTxtTemporales = new CrearTxtTemporales(ventana, parser);
-            ventana.getBtnCrearTxtTemporales().addActionListener(e -> logicaTxtTemporales.ejecutar());
+            // CREACIÓN DEL TXT (Semántica 2: registro de reglas)
+            CrearTxtSemantica2 logicaTxtSemantica2 = new CrearTxtSemantica2(ventana, parser);
+            ventana.getBtnCrearTxtSemantica2().addActionListener(e -> logicaTxtSemantica2.ejecutar());
 
             ventana.setVisible(true);
         });

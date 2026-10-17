@@ -51,6 +51,12 @@ public class Parser {
     private Map<String, Integer> contadoresTemporalesInicio;
     private List<Object[]> erroresTiposPendientes;
 
+    // Semántica 2: registro de reglas {línea, regla, descripción, situación, lexema, ámbito}
+    private List<Object[]> registroSemantica2 = new ArrayList<>();
+    private Object[] asignacionPendiente;   // {regla, descripción, aceptada, lexema} de la última asignación reducida
+    private int reglaCondicion;             // regla de la condición abierta (1010-1013)
+    private String palabraCondicion;        // if / elseif / while / do-while
+
     private static final Map<String, String> CODIGO_A_TOKEN = new LinkedHashMap<>();
 
     private static final Map<String, String> CODIGO_A_TIPO = new LinkedHashMap<>();
@@ -272,6 +278,8 @@ public class Parser {
         this.logCuadruplos = new ArrayList<>();
         this.resumenTemporales = new ArrayList<>();
         this.contadoresTemporales = new LinkedHashMap<>();
+        this.registroSemantica2 = new ArrayList<>();
+        this.asignacionPendiente = null;
 
         pila.push("$");
         pila.push("PROGRAMA");
@@ -513,6 +521,7 @@ public class Parser {
                     String destino = (ultimoTokenConsumido.lexema.equals("]") && objetivoArreglo != null)
                         ? objetivoArreglo : ultimoTokenConsumido.lexema;
                     lineaApertura = ultimoTokenConsumido.linea;
+                    asignacionPendiente = null;
                     contadoresTemporalesInicio = new LinkedHashMap<>(contadoresTemporales);
                     logPilasExpresion.add("Linea " + lineaApertura + " - Apertura de asignación");
                     insertarOperando(destino);
@@ -526,6 +535,10 @@ public class Parser {
                 if (profundidadExpresion == 0) {
                     // Solo se emite si quedó un único prefijo; arreglos o ternario en el lado derecho no se procesan
                     if (pilaOperandos.size() == 1) {
+                        if (asignacionPendiente != null) {
+                            registrarSemantica2(lineaApertura, (Integer) asignacionPendiente[0], (String) asignacionPendiente[1],
+                                (Boolean) asignacionPendiente[2], (String) asignacionPendiente[3]);
+                        }
                         String lineaPrefijo = "Linea " + lineaApertura + " - Prefijo: " + pilaOperandos.peek().prefijo;
                         logPrefijos.add(lineaPrefijo);
                         logPilasExpresion.add(lineaPrefijo);
@@ -537,6 +550,45 @@ public class Parser {
                         }
                     } else {
                         // Asignación descartada: no deja temporales ni errores de tipos
+                        contadoresTemporales = contadoresTemporalesInicio;
+                    }
+                    reiniciarExpresion();
+                }
+                continue;
+            }
+
+            // ==================== SEMÁNTICA 2: CONDICIONES (828-832) ====================
+            // 828 if, 829 elseif, 830 while, 831 do-while abren la condición; 832 la cierra y registra la regla.
+            if (cimaPila.equals("828") || cimaPila.equals("829") || cimaPila.equals("830") || cimaPila.equals("831")) {
+                pila.pop();
+                if (profundidadExpresion == 0) {
+                    switch (cimaPila) {
+                        case "828": reglaCondicion = 1010; palabraCondicion = "if"; break;
+                        case "829": reglaCondicion = 1011; palabraCondicion = "elseif"; break;
+                        case "830": reglaCondicion = 1012; palabraCondicion = "while"; break;
+                        default: reglaCondicion = 1013; palabraCondicion = "do-while"; break;
+                    }
+                    lineaApertura = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
+                    contadoresTemporalesInicio = new LinkedHashMap<>(contadoresTemporales);
+                    logPilasExpresion.add("Linea " + lineaApertura + " - Apertura de condición " + palabraCondicion);
+                }
+                profundidadExpresion++;
+                continue;
+            }
+            if (cimaPila.equals("832")) {
+                pila.pop();
+                profundidadExpresion--;
+                if (profundidadExpresion == 0) {
+                    if (pilaOperandos.size() == 1) {
+                        Operando resultado = pilaOperandos.peek();
+                        boolean aceptada = resultado.tipo.equals("bool") || resultado.tipo.equals("variant");
+                        String descripcion = "Condicion " + palabraCondicion + ": se espera Boolean; resultado "
+                            + etiquetaTipo(resultado.tipo) + ".";
+                        registrarSemantica2(lineaApertura, reglaCondicion, descripcion, aceptada, resultado.valor);
+                        for (Object[] fila : erroresTiposPendientes) {
+                            if (gui != null) gui.getModeloErrores().addRow(fila);
+                        }
+                    } else {
                         contadoresTemporales = contadoresTemporalesInicio;
                     }
                     reiniciarExpresion();
@@ -1109,6 +1161,7 @@ public class Parser {
                     "Asignación incompatible (" + operador + "): " + etiquetaTipo(tipoDestino) + " no puede recibir " + etiquetaTipo(tipoValor),
                     operandos[0].valor + " " + operador + " " + operandos[1].valor, "Semántico", String.valueOf(linea) });
             }
+            evaluarAsignacionSemantica2(operador, operandos[0], operandos[1]);
             cuadruplosActuales.add(operador + "," + String.join(",", valores));
             pilaOperandos.push(new Operando(prefijo, operandos[0].valor, operandos[0].tipo));
             return;
@@ -1118,6 +1171,55 @@ public class Parser {
         String temporal = nuevoTemporal(tipo);
         cuadruplosActuales.add(operador + "," + String.join(",", valores) + (aridad == 1 ? "," : "") + "," + temporal);
         pilaOperandos.push(new Operando(prefijo, temporal, tipo));
+    }
+
+    public List<Object[]> getRegistroSemantica2() {
+        return registroSemantica2;
+    }
+
+    private void registrarSemantica2(int linea, int regla, String descripcion, boolean aceptada, String lexema) {
+        int ambito = pilaAmbitos.isEmpty() ? 0 : pilaAmbitos.peek();
+        registroSemantica2.add(new Object[] { linea, regla, descripcion, aceptada ? "Aceptada" : "Rechazada", lexema, ambito });
+    }
+
+    // Reglas 1020-1022: el destino debe ser del mismo tipo que la expresión. Un tipo variant (no declarado) se acepta.
+    // Las asignaciones compuestas se validan con la tabla de compatibilidad de su operación (+= SUMA, -= RESTA, *= MULT, /= DIV).
+    private void evaluarAsignacionSemantica2(String operador, Operando destino, Operando valor) {
+        int regla = operador.equals("=") ? 1020 : operador.equals("+=") ? 1021 : 1022;
+        String lexema = destino.valor + " " + operador + " " + valor.valor;
+        String tipoDestino = destino.tipo;
+        String tipoValor = valor.tipo;
+        String prefijoDescripcion = "Asignacion " + operador + ": ";
+        boolean aceptada = true;
+        String tipoResultado;
+        String detalle = null;
+
+        if (tipoDestino.equals("variant") || tipoValor.equals("variant")) {
+            tipoResultado = tipoValor.equals("variant") ? tipoDestino : tipoValor;
+        } else if (operador.equals("=")) {
+            tipoResultado = tipoValor;
+            aceptada = tipoDestino.equals(tipoValor);
+            if (!aceptada) detalle = "tipos incompatibles entre " + etiquetaTipo(tipoDestino) + " y " + etiquetaTipo(tipoValor);
+        } else {
+            String clave = operador.equals("+=") ? "SUMA" : operador.equals("-=") ? "RESTA" : operador.equals("*=") ? "MULT" : "DIV";
+            int[][] tabla = lectorMatriz.getTablaCompatibilidad(clave);
+            int celda = (tabla != null) ? tabla[indiceTipo(tipoDestino)][indiceTipo(tipoValor)] : 0;
+            if (celda > 0) {
+                aceptada = false;
+                tipoResultado = "variant";
+                detalle = "operacion incompatible entre " + etiquetaTipo(tipoDestino) + " y " + etiquetaTipo(tipoValor);
+                int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
+                erroresTiposPendientes.add(new Object[] {
+                    String.valueOf(celda),
+                    "Tipos incompatibles para '" + operador + "': " + etiquetaTipo(tipoDestino) + " y " + etiquetaTipo(tipoValor),
+                    lexema, "Semántico", String.valueOf(linea) });
+            } else {
+                tipoResultado = tipoDeCodigo(celda);
+            }
+        }
+        String descripcion = prefijoDescripcion + (detalle != null ? detalle + "."
+            : "destino " + etiquetaTipo(tipoDestino) + ", resultado " + etiquetaTipo(tipoResultado) + ".");
+        asignacionPendiente = new Object[] { regla, descripcion, aceptada, lexema };
     }
 
     private boolean esAsignacion(String operador) {
