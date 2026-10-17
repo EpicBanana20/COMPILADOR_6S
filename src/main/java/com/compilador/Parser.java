@@ -1179,7 +1179,7 @@ public class Parser {
 
     private void registrarSemantica2(int linea, int regla, String descripcion, boolean aceptada, String lexema) {
         int ambito = pilaAmbitos.isEmpty() ? 0 : pilaAmbitos.peek();
-        registroSemantica2.add(new Object[] { linea, regla, descripcion, aceptada ? "Aceptada" : "Rechazada", lexema, ambito });
+        registroSemantica2.add(new Object[] { linea, regla, descripcion, aceptada ? "ACEPT" : "ERROR", lexema, ambito });
     }
 
     // Reglas 1020-1022: el destino debe ser del mismo tipo que la expresión. Un tipo variant (no declarado) se acepta.

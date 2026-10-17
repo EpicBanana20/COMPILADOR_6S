@@ -36,57 +36,53 @@ public class CrearTxtSemantica2 {
     }
 
     private void generarTxt(String rutaAbsoluta, List<Object[]> registro) {
+        String[] titulos = { "Linea", "Regla", "Descripcion", "Situacion de la regla", "Lexema", "Ambito" };
+        int[] anchos = new int[titulos.length];
+        for (int i = 0; i < titulos.length; i++) anchos[i] = titulos[i].length();
         int aceptadas = 0;
-        int anchoDescripcion = "Descripcion".length();
-        int anchoLexema = "Lexema".length();
         for (Object[] fila : registro) {
-            if ("Aceptada".equals(fila[3])) aceptadas++;
-            anchoDescripcion = Math.max(anchoDescripcion, String.valueOf(fila[2]).length());
-            anchoLexema = Math.max(anchoLexema, String.valueOf(fila[4]).length());
+            if ("ACEPT".equals(fila[3])) aceptadas++;
+            for (int i = 0; i < titulos.length; i++) {
+                anchos[i] = Math.max(anchos[i], String.valueOf(fila[i]).length());
+            }
         }
 
         try (BufferedWriter writer = new BufferedWriter(new java.io.OutputStreamWriter(new java.io.FileOutputStream(rutaAbsoluta), "UTF-8"))) {
-            writer.write("SEMANTICA 2 - REGISTRO DE REGLAS");
+            writer.write(fila(titulos, anchos));
+            writer.newLine();
+            for (Object[] f : registro) {
+                String[] celdas = new String[titulos.length];
+                for (int i = 0; i < celdas.length; i++) celdas[i] = String.valueOf(f[i]);
+                writer.write(fila(celdas, anchos));
+                writer.newLine();
+            }
             writer.newLine();
             writer.write("Evaluadas: " + registro.size() + "   Aceptadas: " + aceptadas + "   Rechazadas: " + (registro.size() - aceptadas));
             writer.newLine();
-            writer.newLine();
-
-            String encabezado = relleno("Linea", 5) + " | " + relleno("Regla", 5) + " | " + relleno("Descripcion", anchoDescripcion)
-                + " | " + relleno("Situacion", 9) + " | " + relleno("Lexema", anchoLexema) + " | Ambito";
-            writer.write(encabezado);
-            writer.newLine();
-            StringBuilder separador = new StringBuilder();
-            for (int i = 0; i < encabezado.length(); i++) separador.append('-');
-            writer.write(separador.toString());
-            writer.newLine();
-
-            for (Object[] fila : registro) {
-                writer.write(relleno(String.valueOf(fila[0]), 5) + " | " + relleno(String.valueOf(fila[1]), 5)
-                    + " | " + relleno(String.valueOf(fila[2]), anchoDescripcion)
-                    + " | " + relleno(String.valueOf(fila[3]), 9)
-                    + " | " + relleno(String.valueOf(fila[4]), anchoLexema)
-                    + " | " + fila[5]);
-                writer.newLine();
-            }
-
-            JOptionPane.showMessageDialog(gui,
-                "¡El archivo TXT se generó correctamente!",
-                "Exportación Exitosa",
-                JOptionPane.INFORMATION_MESSAGE);
-
         } catch (Exception e) {
             JOptionPane.showMessageDialog(gui,
                 "Error al guardar el archivo: " + e.getMessage(),
                 "Error",
                 JOptionPane.ERROR_MESSAGE);
             e.printStackTrace();
+            return;
         }
+        JOptionPane.showMessageDialog(gui,
+            "¡El archivo TXT se generó correctamente!",
+            "Exportación Exitosa",
+            JOptionPane.INFORMATION_MESSAGE);
     }
 
-    private String relleno(String texto, int ancho) {
-        StringBuilder sb = new StringBuilder(texto);
-        while (sb.length() < ancho) sb.append(' ');
+    // Una línea de la tabla: celdas rellenadas al ancho de su columna y separadas por " | "
+    private String fila(String[] celdas, int[] anchos) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < celdas.length; i++) {
+            if (i > 0) sb.append(" | ");
+            sb.append(celdas[i]);
+            if (i < celdas.length - 1) {
+                for (int k = celdas[i].length(); k < anchos[i]; k++) sb.append(' ');
+            }
+        }
         return sb.toString();
     }
 }
