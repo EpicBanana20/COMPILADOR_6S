@@ -57,6 +57,11 @@ public class Parser {
     private int reglaCondicion;             // regla de la condición abierta (1010-1013)
     private String palabraCondicion;        // if / elseif / while / do-while
     private Stack<ContextoArreglo> pilaContextosArreglo = new Stack<>(); // accesos id[...] en curso (reglas 1030-1050)
+    private Stack<Object[]> pilaSwitch = new Stack<>(); // switch en curso: {tipo base (String o null), lexema de la expresión} (reglas 1060-1061)
+    private boolean unarioPropioAbierto;    // un unario fuera de toda expresión abrió su propio contexto (regla 1070)
+    private int posInicioFor;               // primer token de la cabecera del for
+    private int posInicioForValor2;         // primer token del valor 2 de un for-in
+    private int posInicioIncremento;        // primer token del incremento de un for clásico
 
     private static final Map<String, String> CODIGO_A_TOKEN = new LinkedHashMap<>();
 
@@ -299,6 +304,8 @@ public class Parser {
         this.registroSemantica2 = new ArrayList<>();
         this.asignacionPendiente = null;
         this.pilaContextosArreglo = new Stack<>();
+        this.pilaSwitch = new Stack<>();
+        this.unarioPropioAbierto = false;
 
         pila.push("$");
         pila.push("PROGRAMA");
@@ -387,6 +394,11 @@ public class Parser {
                 int lineaCambio = (tokenActual != null) ? tokenActual.linea : 0;
                 logAreas.add("Linea " + lineaCambio + " - Area de declaración - " + (abre ? "True" : "False"));
                 logAreas.add("Linea " + lineaCambio + " - Area de ejecución - " + (abre ? "False" : "True"));
+                if (abre) {
+                    posInicioFor = posicionActual;
+                } else if (tokenActual != null && tokenActual.lexema.equals(";")) {
+                    evaluarForInicializacion(posInicioFor, posicionActual - 1);
+                }
                 continue;
             }
             if (cimaPila.equals("827")) { // 'reg X' en una declaración var: X debe ser un reg declarado
@@ -462,6 +474,9 @@ public class Parser {
                 pila.pop();
                 if (ultimoIdConsumido != null) {
                     boolean asignaEnFor = enCabeceraFor && tokenActual != null && tokenActual.lexema.equals("=");
+                    // Regla 1100: el id usado debe estar declarado (el del for se declara aquí mismo)
+                    registrarSemantica2(ultimoIdConsumido.linea, 1100, "Variable declarada",
+                        asignaEnFor || existeEnAmbitoOAncestro(ultimoIdConsumido.lexema), ultimoIdConsumido.lexema);
                     if (asignaEnFor) {
                         // for (#Dx = 0; ...): la asignación inicial declara una variable local al for,
                         // aunque exista una con ese nombre en un ámbito superior
@@ -489,6 +504,13 @@ public class Parser {
             }
             if (cimaPila.equals("815")) { // Insertar operador
                 pila.pop();
+                if (profundidadExpresion == 0 && ultimoTokenConsumido != null && esUnarioSemantica2(ultimoTokenConsumido.lexema)) {
+                    // Unario suelto (++#Dx; o !(...);): abre su propio contexto para poder tipar el operando (regla 1070)
+                    lineaApertura = ultimoTokenConsumido.linea;
+                    contadoresTemporalesInicio = new LinkedHashMap<>(contadoresTemporales);
+                    profundidadExpresion++;
+                    unarioPropioAbierto = true;
+                }
                 if (profundidadExpresion > 0 && ultimoTokenConsumido != null) {
                     pilaOperadores.push(ultimoTokenConsumido.lexema);
                     logPilasExpresion.add("Linea " + ultimoTokenConsumido.linea + " - Inserción operador: " + ultimoTokenConsumido.lexema
@@ -503,7 +525,16 @@ public class Parser {
             }
             if (cimaPila.equals("817")) { // Reducir unario
                 pila.pop();
+                boolean cierraUnarioPropio = unarioPropioAbierto && pilaOperadores.size() == 1;
                 if (profundidadExpresion > 0) reducir(1);
+                if (cierraUnarioPropio) {
+                    unarioPropioAbierto = false;
+                    for (Object[] fila : erroresTiposPendientes) {
+                        if (gui != null) gui.getModeloErrores().addRow(fila);
+                    }
+                    contadoresTemporales = contadoresTemporalesInicio; // el unario suelto no deja temporales
+                    reiniciarExpresion();
+                }
                 continue;
             }
             if (cimaPila.equals("818")) { // Reducir ternario
@@ -536,6 +567,20 @@ public class Parser {
             }
             if (cimaPila.equals("821")) { // Apertura de asignación (id ASIG OR)
                 pila.pop();
+                if (ultimoTokenConsumido != null) {
+                    // Regla 1090: el destino debe ser variable, parámetro o arreglo
+                    String textoDestino = ultimoTokenConsumido.lexema;
+                    if (textoDestino.equals("]")) {
+                        textoDestino = (profundidadExpresion == 0 && objetivoArreglo != null) ? objetivoArreglo
+                            : (!pilaOperandos.isEmpty() ? pilaOperandos.peek().valor : textoDestino);
+                    }
+                    int corchete = textoDestino.indexOf('[');
+                    Simbolo simboloDestino = buscarSimbolo(corchete >= 0 ? textoDestino.substring(0, corchete) : textoDestino);
+                    String claseDestino = (simboloDestino == null) ? "variant" : simboloDestino.getClase();
+                    boolean destinoValido = claseDestino.equals("variant") || claseDestino.equals("var")
+                        || claseDestino.equals("par") || claseDestino.equals("arr");
+                    registrarSemantica2(ultimoTokenConsumido.linea, 1090, "Tipo valido para recibir valor", destinoValido, textoDestino);
+                }
                 if (profundidadExpresion == 0 && ultimoTokenConsumido != null) {
                     String destino = (ultimoTokenConsumido.lexema.equals("]") && objetivoArreglo != null)
                         ? objetivoArreglo : ultimoTokenConsumido.lexema;
@@ -668,6 +713,81 @@ public class Parser {
                     }
                     reiniciarExpresion();
                 }
+                continue;
+            }
+
+            // ==================== SEMÁNTICA 2: SWITCH (839-842, 849) ====================
+            // 839/840 abren y cierran la expresión del switch (1060); 841/842 la de cada case (1061); 849 cierra el switch.
+            if (cimaPila.equals("839") || cimaPila.equals("841") || cimaPila.equals("845")) {
+                pila.pop();
+                if (profundidadExpresion == 0) {
+                    lineaApertura = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
+                    contadoresTemporalesInicio = new LinkedHashMap<>(contadoresTemporales);
+                }
+                profundidadExpresion++;
+                continue;
+            }
+            if (cimaPila.equals("840") || cimaPila.equals("842") || cimaPila.equals("846")) {
+                String accion = cimaPila;
+                pila.pop();
+                profundidadExpresion--;
+                if (profundidadExpresion == 0) {
+                    Operando resultado = (pilaOperandos.size() == 1) ? pilaOperandos.peek() : null;
+                    if (accion.equals("840")) {
+                        String tipo = (resultado != null) ? resultado.tipo : "variant";
+                        boolean valido = tipo.equals("cadena") || tipo.equals("dec") || tipo.equals("variant");
+                        if (resultado != null) {
+                            registrarSemantica2(lineaApertura, 1060, "Switch: se espera Cadena o entero; expresion " + etiquetaTipo(tipo) + ".",
+                                valido, resultado.valor);
+                        }
+                        // Variant o expresión inválida: el tipo base lo fija el primer case válido
+                        pilaSwitch.push(new Object[] { (valido && !tipo.equals("variant")) ? tipo : null,
+                            resultado != null ? resultado.valor : "?" });
+                    } else if (accion.equals("842")) {
+                        if (resultado != null && !pilaSwitch.isEmpty()) {
+                            evaluarCase(resultado);
+                        }
+                    } else if (resultado != null) { // 846: condición del for
+                        boolean aceptada = resultado.tipo.equals("bool") || resultado.tipo.equals("variant");
+                        registrarSemantica2(lineaApertura, 1081, "For: la comparacion debe ser Boolean; resultado "
+                            + etiquetaTipo(resultado.tipo) + ".", aceptada, resultado.valor);
+                    }
+                    if (resultado != null) {
+                        for (Object[] fila : erroresTiposPendientes) {
+                            if (gui != null) gui.getModeloErrores().addRow(fila);
+                        }
+                    } else {
+                        contadoresTemporales = contadoresTemporalesInicio;
+                    }
+                    reiniciarExpresion();
+                }
+                continue;
+            }
+            if (cimaPila.equals("849")) {
+                pila.pop();
+                if (!pilaSwitch.isEmpty()) pilaSwitch.pop();
+                continue;
+            }
+
+            // ==================== SEMÁNTICA 2: FOR (843-844, 847-848) ====================
+            if (cimaPila.equals("843")) { // for-in: termina el valor 1, empieza el valor 2
+                pila.pop();
+                posInicioForValor2 = posicionActual;
+                continue;
+            }
+            if (cimaPila.equals("844")) { // for-in: termina el valor 2 (1083 cadenas, 1084 arreglos)
+                pila.pop();
+                evaluarForIn(posInicioFor, posInicioForValor2 - 2, posInicioForValor2, posicionActual - 1);
+                continue;
+            }
+            if (cimaPila.equals("847")) { // for clásico: empieza el incremento
+                pila.pop();
+                posInicioIncremento = posicionActual;
+                continue;
+            }
+            if (cimaPila.equals("848")) { // for clásico: termina el incremento (1082)
+                pila.pop();
+                evaluarForIncremento(posInicioIncremento, posicionActual - 1);
                 continue;
             }
 
@@ -1211,6 +1331,7 @@ public class Parser {
             operandos[i] = pilaOperandos.pop();
         }
 
+        if (aridad == 1 && esUnarioSemantica2(operador)) evaluarUnario(operador, operandos[0]);
         if (aridad == 1 && operador.equals("+")) {
             pilaOperandos.push(operandos[0]);
             return;
@@ -1307,6 +1428,138 @@ public class Parser {
         registrarSemantica2(linea, 1050,
             fuera == null ? okDesc : "Lista de arreglo: " + fuera + ".",
             fuera == null, acceso);
+    }
+
+    private boolean esUnarioSemantica2(String operador) {
+        return operador.equals("++") || operador.equals("--") || operador.equals("!") || operador.equals("~");
+    }
+
+    // Regla 1070: ++ y -- sobre entero (#D), ! sobre Boolean, ~ sobre un entero (#D, #O, #B, #X). Variant se acepta.
+    private void evaluarUnario(String operador, Operando operando) {
+        String tipo = operando.tipo;
+        boolean aceptada;
+        String esperado;
+        if (operador.equals("!")) {
+            aceptada = tipo.equals("bool");
+            esperado = "Boolean";
+        } else if (operador.equals("~")) {
+            aceptada = tipo.equals("dec") || tipo.equals("oct") || tipo.equals("bin") || tipo.equals("hex");
+            esperado = "Decimal, Octal, Binario o Hexadecimal";
+        } else {
+            aceptada = tipo.equals("dec");
+            esperado = "entero (#D)";
+        }
+        aceptada = aceptada || tipo.equals("variant");
+        int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
+        registrarSemantica2(linea, 1070, "Operador unario " + operador + ": se espera " + esperado + "; operando "
+            + etiquetaTipo(tipo) + ".", aceptada, operando.valor);
+    }
+
+    // Regla 1061: el case debe ser Cadena o entero (#D) y del mismo tipo que la expresión del switch.
+    // Si la expresión era variant (o inválida), el primer case válido fija el tipo contra el que se comparan los demás.
+    private void evaluarCase(Operando caso) {
+        Object[] contexto = pilaSwitch.peek();
+        String tipoBase = (String) contexto[0];
+        String tipo = caso.tipo;
+        boolean tipoValido = tipo.equals("cadena") || tipo.equals("dec");
+        boolean aceptada;
+        String detalle;
+        if (tipo.equals("variant")) {
+            aceptada = true;
+            detalle = "case Variant se acepta";
+        } else if (tipoBase == null) {
+            aceptada = tipoValido;
+            if (tipoValido) contexto[0] = tipo;
+            detalle = tipoValido ? "tipo base tomado del case: " + etiquetaTipo(tipo) : "se espera Cadena o entero, es " + etiquetaTipo(tipo);
+        } else {
+            aceptada = tipoValido && tipo.equals(tipoBase);
+            detalle = aceptada ? "case " + etiquetaTipo(tipo) + " igual al switch"
+                : "case " + etiquetaTipo(tipo) + " debe ser " + etiquetaTipo(tipoBase);
+        }
+        int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
+        registrarSemantica2(linea, 1061, "Case: " + detalle + ".", aceptada, contexto[1] + " vs " + caso.valor);
+    }
+
+    // Tipo y clase de un valor del for-in: un id simple sale de la tabla de símbolos (variant si no está declarado),
+    // una constante, de su token; cualquier otra expresión se toma como variant. Devuelve {tipo, clase}.
+    private String[] tipoClaseDeRango(int desde, int hasta) {
+        if (desde == hasta && desde >= 0 && desde < tokens.size()) {
+            Token t = tokens.get(desde);
+            if (CODIGO_A_TIPO.containsKey(t.token)) {
+                Simbolo s = buscarSimbolo(t.lexema);
+                if (s == null) return new String[] { "variant", "variant" };
+                String tipo = s.getTipo() == null || s.getTipo().equals("registro") ? "variant" : s.getTipo();
+                return new String[] { tipo, s.getClase() };
+            }
+            return new String[] { tipoDeToken(t), "const" };
+        }
+        return new String[] { "variant", "variant" };
+    }
+
+    // Regla 1080: la inicialización del for clásico debe asignar a un entero (#D); variant se acepta
+    private void evaluarForInicializacion(int desde, int hasta) {
+        if (desde < 0 || desde > hasta || hasta >= tokens.size()) return;
+        Token id = tokens.get(desde);
+        boolean asigna = CODIGO_A_TIPO.containsKey(id.token) && desde < hasta && tokens.get(desde + 1).lexema.equals("=");
+        boolean aceptada = false;
+        String detalle = "la inicializacion debe ser una asignacion a un entero";
+        if (asigna) {
+            String tipo = tipoDeToken(id);
+            if (!existeEnAmbitoOAncestro(id.lexema)) tipo = "variant";
+            aceptada = tipo.equals("dec") || tipo.equals("variant");
+            detalle = "la variable debe ser entero (#D), es " + etiquetaTipo(tipo);
+        }
+        registrarSemantica2(id.linea, 1080, "For inicializacion: " + detalle + ".", aceptada, textoTokens(desde, hasta));
+    }
+
+    // Regla 1082: el incremento del for clásico debe ser ++, --, += o -= sobre un entero (#D); variant se acepta
+    private void evaluarForIncremento(int desde, int hasta) {
+        if (desde < 0 || desde > hasta || hasta >= tokens.size()) return;
+        Token operadorToken = null;
+        Token id = null;
+        for (int i = desde; i <= hasta; i++) {
+            Token t = tokens.get(i);
+            String l = t.lexema;
+            if (operadorToken == null && (l.equals("++") || l.equals("--") || l.equals("+=") || l.equals("-="))) operadorToken = t;
+            if (id == null && CODIGO_A_TIPO.containsKey(t.token)) id = t;
+        }
+        boolean aceptada = false;
+        String detalle = "el incremento debe ser ++, --, += o -= sobre un entero";
+        if (operadorToken != null && id != null) {
+            Simbolo s = buscarSimbolo(id.lexema);
+            String tipo = (s == null) ? "variant" : s.getTipo();
+            aceptada = "dec".equals(tipo) || "variant".equals(tipo);
+            detalle = "la variable debe ser entero (#D), es " + etiquetaTipo(tipo);
+        }
+        registrarSemantica2(tokens.get(desde).linea, 1082, "For incremento/decremento: " + detalle + ".", aceptada, textoTokens(desde, hasta));
+    }
+
+    // Reglas 1083 (valor 2 cadena: valor 1 entero) y 1084 (valor 2 arreglo: valor 1 de su mismo tipo). Variant se acepta.
+    private void evaluarForIn(int desde1, int hasta1, int desde2, int hasta2) {
+        if (desde1 < 0 || hasta2 >= tokens.size() || desde2 > hasta2) return;
+        String[] v1 = tipoClaseDeRango(desde1, hasta1);
+        String[] v2 = tipoClaseDeRango(desde2, hasta2);
+        String lexema = textoTokens(desde1, hasta1) + " : " + textoTokens(desde2, hasta2);
+        int linea = tokens.get(desde1).linea;
+        boolean variant1 = v1[0].equals("variant");
+        boolean variant2 = v2[0].equals("variant");
+        if (variant2) {
+            if (variant1) {
+                registrarSemantica2(linea, 1083, "For-in: ambos valores Variant, se acepta.", true, lexema);
+            }
+            registrarSemantica2(linea, 1084, "For-in: valor 2 Variant, se toma como arreglo del tipo del valor 1.", true, lexema);
+        } else if (v2[1].equals("arr")) {
+            boolean aceptada = variant1 || v1[0].equals(v2[0]);
+            registrarSemantica2(linea, 1084, aceptada ? "For-in: el valor 1 es del mismo tipo que el arreglo."
+                : "For-in: el valor 1 (" + etiquetaTipo(v1[0]) + ") debe ser del mismo tipo que el arreglo (" + etiquetaTipo(v2[0]) + ").",
+                aceptada, lexema);
+        } else if (v2[0].equals("cadena")) {
+            boolean aceptada = variant1 || v1[0].equals("dec");
+            registrarSemantica2(linea, 1083, aceptada ? "For-in: cadena recorrida con un entero."
+                : "For-in: sobre una cadena el valor 1 debe ser entero (#D), es " + etiquetaTipo(v1[0]) + ".", aceptada, lexema);
+        } else {
+            registrarSemantica2(linea, 1084, "For-in: el valor 2 debe ser un arreglo o una cadena, es " + etiquetaTipo(v2[0]) + ".", false, lexema);
+        }
     }
 
     private Simbolo buscarSimbolo(String id) {
