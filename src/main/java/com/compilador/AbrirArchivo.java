@@ -20,11 +20,14 @@ public class AbrirArchivo {
 
         FileDialog dialogo = new FileDialog((Frame) null, "Selecciona un archivo", FileDialog.LOAD);
 
+        dialogo.setFile("*.txt"); // Windows: el diálogo nativo filtra por este patrón
+        dialogo.setFilenameFilter((carpeta, nombre) -> nombre.toLowerCase().endsWith(".txt")); // otros sistemas
+
         dialogo.setVisible(true);
         String dir = dialogo.getDirectory();
         String file = dialogo.getFile();
 
-        if (file != null) {
+        if (file != null && file.toLowerCase().endsWith(".txt")) {
             File archivo = new File(dir, file);
 
             gui.getLabelRutaArchivo().setText(archivo.getAbsolutePath());
