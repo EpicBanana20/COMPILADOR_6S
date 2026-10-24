@@ -59,6 +59,7 @@ public class Parser {
     private Stack<ContextoArreglo> pilaContextosArreglo = new Stack<>(); // accesos id[...] en curso (reglas 1030-1050)
     private Stack<Object[]> pilaSwitch = new Stack<>(); // switch en curso: {tipo base (String o null), lexema de la expresión} (reglas 1060-1061)
     private boolean unarioPropioAbierto;    // un unario fuera de toda expresión abrió su propio contexto (regla 1070)
+    private String ultimoAccesoArreglo;     // texto del último acceso id[...] cerrado (destino de una asignación a arreglo)
     private int posInicioFor;               // primer token de la cabecera del for
     private int posInicioForValor2;         // primer token del valor 2 de un for-in
     private int posInicioIncremento;        // primer token del incremento de un for clásico
@@ -306,6 +307,7 @@ public class Parser {
         this.pilaContextosArreglo = new Stack<>();
         this.pilaSwitch = new Stack<>();
         this.unarioPropioAbierto = false;
+        this.ultimoAccesoArreglo = null;
 
         pila.push("$");
         pila.push("PROGRAMA");
@@ -473,11 +475,20 @@ public class Parser {
             if (cimaPila.equals("812")) {
                 pila.pop();
                 if (ultimoIdConsumido != null) {
-                    boolean asignaEnFor = enCabeceraFor && tokenActual != null && tokenActual.lexema.equals("=");
-                    // Regla 1100: el id usado debe estar declarado (el del for se declara aquí mismo)
-                    registrarSemantica2(ultimoIdConsumido.linea, 1100, "Variable declarada",
-                        asignaEnFor || existeEnAmbitoOAncestro(ultimoIdConsumido.lexema), ultimoIdConsumido.lexema);
-                    if (asignaEnFor) {
+                    String siguiente = (tokenActual != null) ? tokenActual.lexema : "";
+                    boolean asignaEnFor = enCabeceraFor && siguiente.equals("=");
+                    // for (#Dj; ...) y for (#Dc : @cad): el primer id de la cabecera se declara en el for si no existía
+                    boolean declaraEnFor = enCabeceraFor && posicionActual - 1 == posInicioFor
+                        && (siguiente.equals(";") || siguiente.equals(":"))
+                        && !existeEnAmbitoOAncestro(ultimoIdConsumido.lexema);
+                    // Regla 1100: el id usado debe estar declarado (el que declara el for no cuenta como uso)
+                    if (!asignaEnFor && !declaraEnFor) {
+                        registrarSemantica2(ultimoIdConsumido.linea, 1100, "Variable declarada",
+                            existeEnAmbitoOAncestro(ultimoIdConsumido.lexema), ultimoIdConsumido.lexema);
+                    }
+                    if (declaraEnFor) {
+                        declararVariable();
+                    } else if (asignaEnFor) {
                         // for (#Dx = 0; ...): la asignación inicial declara una variable local al for,
                         // aunque exista una con ese nombre en un ámbito superior
                         int ambitoFor = pilaAmbitos.peek();
@@ -569,11 +580,8 @@ public class Parser {
                 pila.pop();
                 if (ultimoTokenConsumido != null) {
                     // Regla 1090: el destino debe ser variable, parámetro o arreglo
-                    String textoDestino = ultimoTokenConsumido.lexema;
-                    if (textoDestino.equals("]")) {
-                        textoDestino = (profundidadExpresion == 0 && objetivoArreglo != null) ? objetivoArreglo
-                            : (!pilaOperandos.isEmpty() ? pilaOperandos.peek().valor : textoDestino);
-                    }
+                    boolean destinoArreglo = ultimoTokenConsumido.lexema.equals("]") && ultimoAccesoArreglo != null;
+                    String textoDestino = destinoArreglo ? ultimoAccesoArreglo : ultimoTokenConsumido.lexema;
                     int corchete = textoDestino.indexOf('[');
                     Simbolo simboloDestino = buscarSimbolo(corchete >= 0 ? textoDestino.substring(0, corchete) : textoDestino);
                     String claseDestino = (simboloDestino == null) ? "variant" : simboloDestino.getClase();
@@ -582,13 +590,21 @@ public class Parser {
                     registrarSemantica2(ultimoTokenConsumido.linea, 1090, "Tipo valido para recibir valor", destinoValido, textoDestino);
                 }
                 if (profundidadExpresion == 0 && ultimoTokenConsumido != null) {
-                    String destino = (ultimoTokenConsumido.lexema.equals("]") && objetivoArreglo != null)
-                        ? objetivoArreglo : ultimoTokenConsumido.lexema;
+                    boolean destinoArreglo = ultimoTokenConsumido.lexema.equals("]") && ultimoAccesoArreglo != null;
+                    String destino = destinoArreglo ? ultimoAccesoArreglo : ultimoTokenConsumido.lexema;
                     lineaApertura = ultimoTokenConsumido.linea;
                     asignacionPendiente = null;
                     contadoresTemporalesInicio = new LinkedHashMap<>(contadoresTemporales);
                     logPilasExpresion.add("Linea " + lineaApertura + " - Apertura de asignación");
                     insertarOperando(destino);
+                    if (destinoArreglo) {
+                        // El destino a[i] es un solo operando con el tipo de los elementos del arreglo
+                        pilaOperandos.pop();
+                        Simbolo arreglo = buscarSimbolo(destino.substring(0, destino.indexOf('[')));
+                        String tipoElemento = (arreglo == null || arreglo.getTipo() == null || arreglo.getTipo().equals("registro"))
+                            ? "variant" : arreglo.getTipo();
+                        pilaOperandos.push(new Operando(destino, destino, tipoElemento));
+                    }
                 }
                 profundidadExpresion++;
                 continue;
@@ -672,7 +688,9 @@ public class Parser {
             if (cimaPila.equals("836")) {
                 pila.pop();
                 if (!pilaContextosArreglo.isEmpty()) {
-                    evaluarAccesoArreglo(pilaContextosArreglo.pop());
+                    ContextoArreglo cierre = pilaContextosArreglo.pop();
+                    ultimoAccesoArreglo = textoTokens(cierre.posId, posicionActual); // incluye el ']' aún sin consumir
+                    evaluarAccesoArreglo(cierre);
                 }
                 continue;
             }
@@ -1452,7 +1470,7 @@ public class Parser {
         aceptada = aceptada || tipo.equals("variant");
         int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
         registrarSemantica2(linea, 1070, "Operador unario " + operador + ": se espera " + esperado + "; operando "
-            + etiquetaTipo(tipo) + ".", aceptada, operando.valor);
+            + etiquetaTipo(tipo) + ".", aceptada, operando.prefijo.contains(" ") ? operando.valor : operando.prefijo);
     }
 
     // Regla 1061: el case debe ser Cadena o entero (#D) y del mismo tipo que la expresión del switch.
@@ -1492,6 +1510,14 @@ public class Parser {
                 return new String[] { tipo, s.getClase() };
             }
             return new String[] { tipoDeToken(t), "const" };
+        }
+        // id[...]: un elemento del arreglo, no el arreglo completo
+        if (desde >= 0 && hasta < tokens.size() && hasta > desde + 1
+                && CODIGO_A_TIPO.containsKey(tokens.get(desde).token)
+                && tokens.get(desde + 1).lexema.equals("[") && tokens.get(hasta).lexema.equals("]")) {
+            Simbolo s = buscarSimbolo(tokens.get(desde).lexema);
+            if (s == null || s.getTipo() == null || s.getTipo().equals("registro")) return new String[] { "variant", "variant" };
+            return new String[] { s.getTipo(), "elemento" };
         }
         return new String[] { "variant", "variant" };
     }
