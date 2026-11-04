@@ -1,0 +1,65 @@
+#Dk = 10;
+var #Da, #Db, #Dc, @s, @t, ¡flag, $r, #Dv[3], #Dm[2,3];
+def #Df ( #Dx, @y )
+  main ( ) {
+    return #Dx
+  } ;
+def #Dg ( #Dx )
+  main ( ) {
+    return @s
+  } ;
+def proc ( #Dx )
+  main ( ) {
+    return #Dx
+  } ;
+def #Df ( #Dz )
+  main ( ) {
+    return #Dz
+  } ;
+def proc ( #Dy )
+  main ( ) {
+    #Dy = 1
+  } ;
+main ( ) {
+  #Da = 1;
+  #Da = @s;
+  #Da += 2;
+  @s += #Da;
+  #Da += ¡flag;
+  #Da -= 1;
+  @s -= @t;
+  #Da *= 2;
+  #Da /= @s;
+  if ( #Da < #Db ) #Da = 1;
+  if ( #Da + 1 ) #Da = 2;
+  if ( ¡flag ) #Da = 1 elseif ( ¡flag ) #Da = 2 elseif ( #Da + 3 ) #Da = 3 else #Da = 4;
+  while ( ¡flag ) #Db = 2;
+  while ( #Db + 1 ) #Db = 2;
+  do { #Da = 1 } while ( ¡flag );
+  do { #Da = 1 } while ( #Db + 1 );
+  #Dv[1] = 5;
+  #Da = #Dv[1,2];
+  #Da = #Dm[1];
+  #Da = #Dv[@s];
+  #Da = #Dv[7];
+  switch ( #Da ) { case 1 : #Db = 1 ; break case "x" : #Db = 3 ; break default : #Db = 4 };
+  switch ( ¡flag ) { case 1 : #Db = 1 ; break };
+  switch ( @s ) { case "a" : #Db = 1 ; break case 5 : #Db = 2 ; break };
+  ++#Da;
+  ++@s;
+  !( ¡flag );
+  !( #Da );
+  ~( #Da );
+  for ( #Dj = 0 ; #Dj < 3 ; ++#Dj ) #Db = 1;
+  for ( @w = "a" ; #Db + 1 ; @w += "b" ) #Db = 1;
+  for ( #Dj : #Dv ) #Db = 1;
+  for ( @w2 : #Dv ) #Db = 1;
+  for ( #Dj : @s ) #Db = 1;
+  for ( $q : @s ) #Db = 1;
+  #Dk = 5;
+  #Dzz = 1;
+  #Da = #Df ( #Da, @s );
+  #Da = #Df ( @t, @s );
+  #Da = #Df ( #Da );
+  return #Da
+}

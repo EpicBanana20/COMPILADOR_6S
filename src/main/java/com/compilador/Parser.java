@@ -1,6 +1,9 @@
 package com.compilador;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +65,10 @@ public class Parser {
     private Stack<Object[]> pilaSwitch = new Stack<>(); // switch en curso: {tipo base (String o null), lexema de la expresión} (reglas 1060-1061)
     private boolean unarioPropioAbierto;    // un unario fuera de toda expresión abrió su propio contexto (regla 1070)
     private String ultimoAccesoArreglo;     // texto del último acceso id[...] cerrado (destino de una asignación a arreglo)
+    private Map<String, Integer> lineaRutinaPorAmbito = new HashMap<>(); // ámbito de la rutina -> línea de su def (regla 1140)
+    private Map<String, Simbolo> rutinaPorAmbito = new HashMap<>();       // ámbito de la rutina -> su símbolo (incluye repetidas)
+    private boolean asignacionIncompatibleReportada;                  // la asignación en curso ya dio el error 555
+    private Set<String> ambitosConReturn = new HashSet<>();               // ámbitos de rutina donde se vio un return
     private int posInicioFor;               // primer token de la cabecera del for
     private int posInicioForValor2;         // primer token del valor 2 de un for-in
     private int posInicioIncremento;        // primer token del incremento de un for clásico
@@ -235,6 +242,7 @@ public class Parser {
         Token id;
         int posId;
         int inicioArgumento;
+        boolean detenida;                     // una regla 1150 falló: no se evalúan los demás argumentos
         boolean propia;                       // la llamada abrió su propia expresión (fuera de una asignación o condición)
         int operandosAlAbrir;
         List<ArgumentoLlamada> argumentos = new ArrayList<>();
@@ -323,6 +331,9 @@ public class Parser {
         this.resumenTemporales = new ArrayList<>();
         this.contadoresTemporales = new LinkedHashMap<>();
         this.registroSemantica2 = new ArrayList<>();
+        this.lineaRutinaPorAmbito = new HashMap<>();
+        this.rutinaPorAmbito = new HashMap<>();
+        this.ambitosConReturn = new HashSet<>();
         this.asignacionPendiente = null;
         this.pilaContextosArreglo = new Stack<>();
         this.pilaContextosLlamada = new Stack<>();
@@ -379,9 +390,11 @@ public class Parser {
                 boolean esDef = posicionActual >= 2 && tokens.get(posicionActual - 2).token.equals("-84");
                 boolean sinPrefijo = ultimoIdConsumido != null && "registro".equals(CODIGO_A_TIPO.get(ultimoIdConsumido.token));
                 boolean esProc = esDef && sinPrefijo;
-                if (esDef && ultimoIdConsumido != null) {
+                // Una rutina repetida ya se reporta como error de ámbito (546): no se registra otra vez en 1110/1120
+                if (esDef && ultimoIdConsumido != null && !existeEnAmbito(ambitoPadreActual, ultimoIdConsumido.lexema)) {
+                    String tipoRutina = esProc ? "Void" : etiquetaT(CODIGO_A_TIPO.get(ultimoIdConsumido.token));
                     registrarSemantica2(ultimoIdConsumido.linea, esProc ? 1110 : 1120, esProc ? "Procedimiento" : "Funcion",
-                        !existeEnAmbito(ambitoPadreActual, ultimoIdConsumido.lexema), ultimoIdConsumido.lexema);
+                        true, ultimoIdConsumido.lexema, tipoRutina);
                 }
                 abrirAmbito(tokenActual);
                 if (ultimoIdConsumido != null) {
@@ -399,12 +412,15 @@ public class Parser {
                         String.valueOf(contadorAmbitos));
                     if (!duplicado) tablaSimbolos.insertar(fun); // un duplicado solo reporta error, no cuenta
                     funcionActual = fun;
+                    lineaRutinaPorAmbito.put(fun.getTParr(), ultimoIdConsumido.linea);
+                    rutinaPorAmbito.put(fun.getTParr(), fun); // también las repetidas: su return y su cuerpo se evalúan igual
                     contadorParametros = 0;
                 }
                 continue;
             }
             if (cimaPila.equals("803")) {
                 pila.pop();
+                evaluarProcedimientoSinReturn();
                 cerrarAmbito(tokenActual);
                 continue;
             }
@@ -514,7 +530,7 @@ public class Parser {
                     // Regla 1100: el id usado debe estar declarado (el que declara el for no cuenta como uso)
                     if (!asignaEnFor && !declaraEnFor) {
                         registrarSemantica2(ultimoIdConsumido.linea, 1100, "Variable declarada",
-                            existeEnAmbitoOAncestro(ultimoIdConsumido.lexema), ultimoIdConsumido.lexema);
+                            existeEnAmbitoOAncestro(ultimoIdConsumido.lexema), ultimoIdConsumido.lexema, "id");
                     }
                     if (declaraEnFor) {
                         declararVariable();
@@ -608,7 +624,7 @@ public class Parser {
             }
             if (cimaPila.equals("821")) { // Apertura de asignación (id ASIG OR)
                 pila.pop();
-                if (ultimoTokenConsumido != null) {
+                if (ultimoTokenConsumido != null && !enCabeceraFor) { // la inicialización del for la evalúa la regla 1080
                     // Regla 1090: el destino debe ser variable, parámetro o arreglo
                     boolean destinoArreglo = ultimoTokenConsumido.lexema.equals("]") && ultimoAccesoArreglo != null;
                     String textoDestino = destinoArreglo ? ultimoAccesoArreglo : ultimoTokenConsumido.lexema;
@@ -617,7 +633,9 @@ public class Parser {
                     String claseDestino = (simboloDestino == null) ? "variant" : simboloDestino.getClase();
                     boolean destinoValido = claseDestino.equals("variant") || claseDestino.equals("var")
                         || claseDestino.equals("par") || claseDestino.equals("arr");
-                    registrarSemantica2(ultimoTokenConsumido.linea, 1090, "Tipo valido para recibir valor", destinoValido, textoDestino);
+                    registrarSemantica2(ultimoTokenConsumido.linea, 1090, "Tipo valido para recibir valor", destinoValido,
+                        corchete >= 0 ? textoDestino.substring(0, corchete) : textoDestino,
+                        "Var/Par/Arr", corchete >= 0 ? textoDestino.substring(0, corchete) : textoDestino);
                 }
                 if (profundidadExpresion == 0 && ultimoTokenConsumido != null) {
                     boolean destinoArreglo = ultimoTokenConsumido.lexema.equals("]") && ultimoAccesoArreglo != null;
@@ -645,9 +663,10 @@ public class Parser {
                 if (profundidadExpresion == 0) {
                     // Solo se emite si quedó un único prefijo; arreglos o ternario en el lado derecho no se procesan
                     if (pilaOperandos.size() == 1) {
-                        if (asignacionPendiente != null) {
+                        if (asignacionPendiente != null && !enCabeceraFor) {
                             registrarSemantica2(lineaApertura, (Integer) asignacionPendiente[0], (String) asignacionPendiente[1],
-                                (Boolean) asignacionPendiente[2], (String) asignacionPendiente[3]);
+                                (Boolean) asignacionPendiente[2], (String) asignacionPendiente[3], (String) asignacionPendiente[4],
+                                (String) asignacionPendiente[5]);
                         }
                         String lineaPrefijo = "Linea " + lineaApertura + " - Prefijo: " + pilaOperandos.peek().prefijo;
                         logPrefijos.add(lineaPrefijo);
@@ -756,6 +775,7 @@ public class Parser {
                     // El argumento no es operando de la expresión que contiene la llamada
                     while (pilaOperandos.size() > llamada.operandosAlAbrir) pilaOperandos.pop();
                     llamada.argumentos.add(argumento);
+                    evaluarArgumentoLlamada(llamada); // 1150 y 1160 de este argumento, en el orden en que se cierran
                     llamada.inicioArgumento = posicionActual + 1; // salta la coma
                 }
                 continue;
@@ -771,7 +791,7 @@ public class Parser {
                         }
                         reiniciarExpresion();
                     }
-                    evaluarLlamada(llamada, textoTokensEspaciado(llamada.posId, posicionActual - 1));
+                    evaluarLlamada(llamada);
                 }
                 continue;
             }
@@ -832,7 +852,7 @@ public class Parser {
                         boolean aceptada = resultado.tipo.equals("bool") || resultado.tipo.equals("variant");
                         String descripcion = "Condicion " + palabraCondicion + ": se espera Boolean; resultado "
                             + etiquetaTipo(resultado.tipo) + ".";
-                        registrarSemantica2(lineaApertura, reglaCondicion, descripcion, aceptada, resultado.valor);
+                        registrarSemantica2(lineaApertura, reglaCondicion, descripcion, aceptada, resultado.valor, "Boolean");
                         for (Object[] fila : erroresTiposPendientes) {
                             if (gui != null) gui.getModeloErrores().addRow(fila);
                         }
@@ -866,7 +886,7 @@ public class Parser {
                         boolean valido = tipo.equals("cadena") || tipo.equals("dec") || tipo.equals("variant");
                         if (resultado != null) {
                             registrarSemantica2(lineaApertura, 1060, "Switch: se espera Cadena o entero; expresion " + etiquetaTipo(tipo) + ".",
-                                valido, resultado.valor);
+                                valido, resultado.valor, "Dec/Cadena");
                         }
                         // Variant o expresión inválida: el tipo base lo fija el primer case válido
                         pilaSwitch.push(new Object[] { (valido && !tipo.equals("variant")) ? tipo : null,
@@ -878,7 +898,7 @@ public class Parser {
                     } else if (resultado != null) { // 846: condición del for
                         boolean aceptada = resultado.tipo.equals("bool") || resultado.tipo.equals("variant");
                         registrarSemantica2(lineaApertura, 1081, "For: la comparacion debe ser Boolean; resultado "
-                            + etiquetaTipo(resultado.tipo) + ".", aceptada, resultado.valor);
+                            + etiquetaTipo(resultado.tipo) + ".", aceptada, resultado.valor, "Boolean");
                     }
                     if (resultado != null) {
                         for (Object[] fila : erroresTiposPendientes) {
@@ -1483,9 +1503,12 @@ public class Parser {
                 erroresTiposPendientes.add(new Object[] {
                     "555",
                     "Asignación incompatible (" + operador + "): " + etiquetaTipo(tipoDestino) + " no puede recibir " + etiquetaTipo(tipoValor),
-                    operandos[0].valor + " " + operador + " " + operandos[1].valor, "Semántico", String.valueOf(linea) });
+                    operandos[0].valor + " " + operador + " " + operandos[1].valor, "Semántica 1", String.valueOf(linea) });
             }
+            // Si la asignación ya se reportó incompatible (555), no se revisa de nuevo el tipo con la tabla de la operación
+            asignacionIncompatibleReportada = !tipoDestino.equals("variant") && !tipoValor.equals("variant") && !tipoDestino.equals(tipoValor);
             evaluarAsignacionSemantica2(operador, operandos[0], operandos[1]);
+            asignacionIncompatibleReportada = false;
             cuadruplosActuales.add(operador + "," + String.join(",", valores));
             pilaOperandos.push(new Operando(prefijo, operandos[0].valor, operandos[0].tipo));
             return;
@@ -1529,7 +1552,7 @@ public class Parser {
         registrarSemantica2(linea, 1030,
             "Lista de arreglo: la dimension " + n + (existeDimension ? " esta declarada." : " no esta declarada (declaradas "
                 + tamanos.size() + ")."),
-            existeDimension, ctx.id.lexema);
+            existeDimension, ctx.id.lexema, "Dim " + tamanos.size());
         if (!existeDimension) { ctx.cortado = true; return; }
 
         boolean entero = indice.tipo.equals("dec") || indice.tipo.equals("bin") || indice.tipo.equals("oct")
@@ -1537,7 +1560,7 @@ public class Parser {
         registrarSemantica2(linea, 1040,
             entero ? "Lista de arreglo: el indice " + n + " es entero."
                    : "Lista de arreglo: el indice " + indice.texto + " debe ser entero, es " + etiquetaTipo(indice.tipo) + ".",
-            entero, indice.lexema);
+            entero, indice.lexema, "Dec");
         if (!entero) { ctx.cortado = true; return; }
 
         Integer tamano = tamanos.get(n - 1);
@@ -1546,7 +1569,7 @@ public class Parser {
             ? "Lista de arreglo: el indice " + indice.valor + " de la dimension " + n + " esta fuera del rango 0.." + (tamano - 1) + "."
             : indice.valor != null ? "Lista de arreglo: el indice " + n + " esta dentro del rango declarado."
                 : "Lista de arreglo: el indice " + n + " no es constante, no se valida en compilacion.";
-        registrarSemantica2(linea, 1050, descripcion, !fuera, indice.lexema);
+        registrarSemantica2(linea, 1050, descripcion, !fuera, indice.lexema, "0.." + (tamano != null ? String.valueOf(tamano - 1) : "?"));
         if (fuera) ctx.cortado = true;
     }
 
@@ -1559,59 +1582,88 @@ public class Parser {
         int usadas = ctx.indices.size();
         if (usadas < declaradas) {
             registrarSemantica2(ctx.id.linea, 1030,
-                "Lista de arreglo: dimensiones usadas " + usadas + ", declaradas " + declaradas + ".", false, ctx.id.lexema);
+                "Lista de arreglo: dimensiones usadas " + usadas + ", declaradas " + declaradas + ".", false, ctx.id.lexema, "Dim " + declaradas);
         }
     }
 
-    // Reglas 1150 (parámetro declarado) y 1160 (tipo del parámetro) de una llamada id(a1, a2, ...) a una función declarada
-    private void evaluarLlamada(ContextoLlamada llamada, String textoLlamada) {
-        if (llamada.id == null) return;
+    // Parámetros de la rutina que se llama; null si el id no es una rutina declarada
+    private List<Simbolo> parametrosDeLlamada(ContextoLlamada llamada) {
+        if (llamada.id == null) return null;
         Simbolo funcion = buscarSimbolo(llamada.id.lexema);
-        if (funcion == null || !("fun".equals(funcion.getClase()) || "proc".equals(funcion.getClase()))) return; // no declarada o no es rutina
+        if (funcion == null || !("fun".equals(funcion.getClase()) || "proc".equals(funcion.getClase()))) return null; // no declarada o no es rutina
         List<Simbolo> parametros = new ArrayList<>();
         for (Simbolo s : tablaSimbolos.getFilas()) {
-            if ("par".equals(s.getClase()) && funcion.getId().equals(s.getTParr())) parametros.add(s);
+            if ("par".equals(s.getClase()) && String.valueOf(s.getAmb()).equals(funcion.getTParr())) parametros.add(s);
         }
+        return parametros;
+    }
+
+    // Reglas 1150 (parámetro declarado) y 1160 (tipo del parámetro) del argumento que acaba de cerrarse (acción 850)
+    private void evaluarArgumentoLlamada(ContextoLlamada llamada) {
+        List<Simbolo> parametros = llamada.detenida ? null : parametrosDeLlamada(llamada);
+        if (parametros == null) return;
+        int n = llamada.argumentos.size();
+        ArgumentoLlamada argumento = llamada.argumentos.get(n - 1);
         int linea = llamada.id.linea;
-        int total = Math.max(parametros.size(), llamada.argumentos.size());
-        for (int n = 1; n <= total; n++) {
-            boolean existe = n <= parametros.size() && n <= llamada.argumentos.size();
-            registrarSemantica2(linea, 1150,
-                "Llamada: el parametro " + n + (existe ? " esta declarado." : parametros.size() < n
-                    ? " no esta declarado (la funcion recibe " + parametros.size() + ")." : " no recibio argumento."),
-                existe, textoLlamada);
-            if (!existe) return;
-            Simbolo parametro = parametros.get(n - 1);
-            ArgumentoLlamada argumento = llamada.argumentos.get(n - 1);
-            boolean tipoIgual = argumento.tipo.equals("variant") || argumento.tipo.equals(parametro.getTipo());
-            registrarSemantica2(linea, 1160,
-                "Llamada: parametro " + n + " " + etiquetaTipo(parametro.getTipo()) + ", argumento " + etiquetaTipo(argumento.tipo) + ".",
-                tipoIgual, argumento.texto);
+        boolean existe = n <= parametros.size();
+        registrarSemantica2(linea, 1150,
+            "Llamada: el parametro " + n + (existe ? " esta declarado." : " no esta declarado (la funcion recibe " + parametros.size() + ")."),
+            existe, argumento.texto, existe ? parametros.get(n - 1).getId() : "-", llamada.id.lexema);
+        if (!existe) {
+            llamada.detenida = true;
+            return;
         }
+        Simbolo parametro = parametros.get(n - 1);
+        // Un argumento numérico se acepta en un parámetro Real o Exp (se amplía al tipo del parámetro)
+        boolean numericoAmpliable = (parametro.getTipo().equals("real") || parametro.getTipo().equals("exp"))
+            && (argumento.tipo.equals("bin") || argumento.tipo.equals("dec") || argumento.tipo.equals("oct")
+                || argumento.tipo.equals("hex") || argumento.tipo.equals("real") || argumento.tipo.equals("exp"));
+        boolean tipoIgual = argumento.tipo.equals("variant") || argumento.tipo.equals(parametro.getTipo()) || numericoAmpliable;
+        registrarSemantica2(linea, 1160,
+            "Llamada: parametro " + n + " " + etiquetaTipo(parametro.getTipo()) + ", argumento " + etiquetaTipo(argumento.tipo) + ".",
+            tipoIgual, argumento.texto, etiquetaT(parametro.getTipo()),
+            llamada.id.lexema + "(par " + n + ": " + argumento.texto + ")");
+    }
+
+    // Al cerrar la llamada (acción 838): si faltan argumentos, el primer parámetro sin argumento falla la regla 1150
+    private void evaluarLlamada(ContextoLlamada llamada) {
+        List<Simbolo> parametros = llamada.detenida ? null : parametrosDeLlamada(llamada);
+        if (parametros == null || llamada.argumentos.size() >= parametros.size()) return;
+        int n = llamada.argumentos.size() + 1;
+        registrarSemantica2(llamada.id.linea, 1150, "Llamada: el parametro " + n + " no recibio argumento.", false, "-",
+            parametros.get(n - 1).getId(), llamada.id.lexema);
     }
 
     // Reglas 1130 (return dentro de una función) y 1131 (el tipo retornado es el de la función)
     private void evaluarReturn(Operando valor, String textoExpresion) {
         Simbolo funcion = null;
         for (int i = pilaAmbitos.size() - 1; i >= 0 && funcion == null; i--) {
-            for (Simbolo s : tablaSimbolos.getFilas()) {
-                if (("fun".equals(s.getClase()) || "proc".equals(s.getClase())) && String.valueOf(pilaAmbitos.get(i)).equals(s.getTParr())) {
-                    funcion = s;
-                    break;
-                }
-            }
+            funcion = rutinaPorAmbito.get(String.valueOf(pilaAmbitos.get(i)));
         }
+        // Fuera de una rutina no se evalúa: la regla 1130 solo se registra para returns dentro de una función o procedimiento
+        if (funcion == null) return;
         int linea = (lineaApertura > 0) ? lineaApertura : (ultimoTokenConsumido != null ? ultimoTokenConsumido.linea : 0);
-        if (funcion != null && "proc".equals(funcion.getClase())) { // regla 1140: un procedimiento no retorna valor
-            registrarSemantica2(linea, 1140, "Un procedimiento no debe tener return", false, "return " + textoExpresion);
+        ambitosConReturn.add(funcion.getTParr());
+        if ("proc".equals(funcion.getClase())) { // regla 1140: un procedimiento no retorna valor
+            registrarSemantica2(linea, 1140, "Un procedimiento no debe tener return", false, valor.valor, "Void", "return " + textoExpresion);
             return;
         }
-        registrarSemantica2(linea, 1130, "Return dentro de una funcion", funcion != null, funcion != null ? funcion.getId() : "return");
-        if (funcion == null) return;
+        registrarSemantica2(linea, 1130, "Return dentro de una funcion", true, funcion.getId(), "return");
         boolean tipoIgual = valor.tipo.equals("variant") || valor.tipo.equals(funcion.getTipo());
         registrarSemantica2(linea, 1131,
             "Return: la funcion es " + etiquetaTipo(funcion.getTipo()) + " y retorna " + etiquetaTipo(valor.tipo) + ".",
-            tipoIgual, "return " + textoExpresion);
+            tipoIgual, valor.valor, etiquetaT(funcion.getTipo()), "return " + textoExpresion);
+    }
+
+    // Regla 1140: al cerrar un procedimiento que no tuvo return, se acepta (un procedimiento no regresa valor)
+    private void evaluarProcedimientoSinReturn() {
+        if (pilaAmbitos.isEmpty()) return;
+        String ambito = String.valueOf(pilaAmbitos.peek());
+        Simbolo rutina = rutinaPorAmbito.get(ambito);
+        if (rutina != null && "proc".equals(rutina.getClase()) && !ambitosConReturn.contains(ambito)) {
+            Integer lineaDef = lineaRutinaPorAmbito.get(ambito);
+            registrarSemantica2(lineaDef != null ? lineaDef : 0, 1140, "Procedimiento sin return", true, rutina.getId(), "Void");
+        }
     }
 
     private boolean esUnarioSemantica2(String operador) {
@@ -1636,7 +1688,11 @@ public class Parser {
         aceptada = aceptada || tipo.equals("variant");
         int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
         registrarSemantica2(linea, 1070, "Operador unario " + operador + ": se espera " + esperado + "; operando "
-            + etiquetaTipo(tipo) + ".", aceptada, operando.prefijo.contains(" ") ? operando.valor : operando.prefijo);
+            + etiquetaTipo(tipo) + ".", aceptada, operando.prefijo.contains(" ") ? operando.valor : operando.prefijo,
+            operador.equals("!") ? "Boolean" : operador.equals("~") ? "Dec/Bin/Oct/Hex" : "Dec",
+            operador.equals("!") || operador.equals("~")
+                ? operador + "(" + (operando.prefijo.contains(" ") ? operando.valor : operando.prefijo) + ")"
+                : operador + (operando.prefijo.contains(" ") ? operando.valor : operando.prefijo));
     }
 
     // Regla 1061: el case debe ser Cadena o entero (#D) y del mismo tipo que la expresión del switch.
@@ -1661,7 +1717,8 @@ public class Parser {
                 : "case " + etiquetaTipo(tipo) + " debe ser " + etiquetaTipo(tipoBase);
         }
         int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
-        registrarSemantica2(linea, 1061, "Case: " + detalle + ".", aceptada, contexto[1] + " vs " + caso.valor);
+        registrarSemantica2(linea, 1061, "Case: " + detalle + ".", aceptada, caso.valor,
+            tipoBase != null ? etiquetaT(tipoBase) : tipoValido ? etiquetaT(tipo) : "Dec/Cadena", caso.valor);
     }
 
     // Tipo y clase de un valor del for-in: un id simple sale de la tabla de símbolos (variant si no está declarado),
@@ -1694,14 +1751,14 @@ public class Parser {
         Token id = tokens.get(desde);
         boolean asigna = CODIGO_A_TIPO.containsKey(id.token) && desde < hasta && tokens.get(desde + 1).lexema.equals("=");
         boolean aceptada = false;
-        String detalle = "la inicializacion debe ser una asignacion a un entero";
+        String detalle = "la inicializacion debe ser un id inicializado con =";
         if (asigna) {
             String tipo = tipoDeToken(id);
             if (!existeEnAmbitoOAncestro(id.lexema)) tipo = "variant";
-            aceptada = tipo.equals("dec") || tipo.equals("variant");
-            detalle = "la variable debe ser entero (#D), es " + etiquetaTipo(tipo);
+            aceptada = true;
+            detalle = "el id " + id.lexema + " queda inicializado (" + etiquetaTipo(tipo) + ")";
         }
-        registrarSemantica2(id.linea, 1080, "For inicializacion: " + detalle + ".", aceptada, textoTokens(desde, hasta));
+        registrarSemantica2(id.linea, 1080, "For inicializacion: " + detalle + ".", aceptada, id.lexema, "id (inicializado)", textoTokens(desde, hasta));
     }
 
     // Regla 1082: el incremento del for clásico debe ser ++, --, += o -= sobre un entero (#D); variant se acepta
@@ -1723,7 +1780,8 @@ public class Parser {
             aceptada = "dec".equals(tipo) || "variant".equals(tipo);
             detalle = "la variable debe ser entero (#D), es " + etiquetaTipo(tipo);
         }
-        registrarSemantica2(tokens.get(desde).linea, 1082, "For incremento/decremento: " + detalle + ".", aceptada, textoTokens(desde, hasta));
+        registrarSemantica2(tokens.get(desde).linea, 1082, "For incremento/decremento: " + detalle + ".", aceptada,
+            id != null ? id.lexema : textoTokens(desde, hasta), "++/--", textoTokens(desde, hasta));
     }
 
     // Reglas 1083 (valor 2 cadena: valor 1 entero) y 1084 (valor 2 arreglo: valor 1 de su mismo tipo). Variant se acepta.
@@ -1731,26 +1789,30 @@ public class Parser {
         if (desde1 < 0 || hasta2 >= tokens.size() || desde2 > hasta2) return;
         String[] v1 = tipoClaseDeRango(desde1, hasta1);
         String[] v2 = tipoClaseDeRango(desde2, hasta2);
-        String lexema = textoTokens(desde1, hasta1) + " : " + textoTokens(desde2, hasta2);
+        String valor1 = textoTokens(desde1, hasta1);
+        String valor2 = textoTokens(desde2, hasta2);
+        String lexema = valor1 + " : " + valor2;
+        String topeArreglo = "Arr " + etiquetaT(v1[0]);
         int linea = tokens.get(desde1).linea;
         boolean variant1 = v1[0].equals("variant");
         boolean variant2 = v2[0].equals("variant");
         if (variant2) {
             if (variant1) {
-                registrarSemantica2(linea, 1083, "For-in: ambos valores Variant, se acepta.", true, lexema);
+                registrarSemantica2(linea, 1083, "For-in: ambos valores Variant, se acepta.", true, valor1, "Dec", lexema);
             }
-            registrarSemantica2(linea, 1084, "For-in: valor 2 Variant, se toma como arreglo del tipo del valor 1.", true, lexema);
+            registrarSemantica2(linea, 1084, "For-in: valor 2 Variant, se toma como arreglo del tipo del valor 1.", true, valor2,
+                "Arr " + etiquetaT(v1[0]), lexema);
         } else if (v2[1].equals("arr")) {
             boolean aceptada = variant1 || v1[0].equals(v2[0]);
             registrarSemantica2(linea, 1084, aceptada ? "For-in: el valor 1 es del mismo tipo que el arreglo."
                 : "For-in: el valor 1 (" + etiquetaTipo(v1[0]) + ") debe ser del mismo tipo que el arreglo (" + etiquetaTipo(v2[0]) + ").",
-                aceptada, lexema);
+                aceptada, valor2, topeArreglo, lexema);
         } else if (v2[0].equals("cadena")) {
             boolean aceptada = variant1 || v1[0].equals("dec");
             registrarSemantica2(linea, 1083, aceptada ? "For-in: cadena recorrida con un entero."
-                : "For-in: sobre una cadena el valor 1 debe ser entero (#D), es " + etiquetaTipo(v1[0]) + ".", aceptada, lexema);
+                : "For-in: sobre una cadena el valor 1 debe ser entero (#D), es " + etiquetaTipo(v1[0]) + ".", aceptada, valor1, "Dec", lexema);
         } else {
-            registrarSemantica2(linea, 1084, "For-in: el valor 2 debe ser un arreglo o una cadena, es " + etiquetaTipo(v2[0]) + ".", false, lexema);
+            registrarSemantica2(linea, 1084, "For-in: el valor 2 debe ser un arreglo o una cadena, es " + etiquetaTipo(v2[0]) + ".", false, valor2, topeArreglo, lexema);
         }
     }
 
@@ -1798,9 +1860,55 @@ public class Parser {
         return registroSemantica2;
     }
 
-    private void registrarSemantica2(int linea, int regla, String descripcion, boolean aceptada, String lexema) {
+    // Registra una regla de Semántica 2. valorReal es el valor evaluado y tope lo que se esperaba en el tope de la pila semántica
+    // (tipo, rango, clase...). Si la regla falla, también se imprime en la tabla de Errores.
+    private void registrarSemantica2(int linea, int regla, String descripcion, boolean aceptada, String valorReal, String tope) {
+        registrarSemantica2(linea, regla, descripcion, aceptada, valorReal, tope, valorReal);
+    }
+
+    private void registrarSemantica2(int linea, int regla, String descripcion, boolean aceptada, String valorReal, String tope,
+                                     String lexemaError) {
         int ambito = pilaAmbitos.isEmpty() ? 0 : pilaAmbitos.peek();
-        registroSemantica2.add(new Object[] { linea, regla, descripcion, aceptada ? "ACEPT" : "ERROR", lexema, ambito });
+        registroSemantica2.add(new Object[] { linea, regla, descripcion, aceptada ? "ACEPT" : "ERROR", valorReal, ambito, tope });
+        // 1100 ya se reporta como error de ámbito (545) y 1020-1022 como errores de Semántica 1: no se repiten en Errores
+        if (!aceptada && regla != 1100 && regla != 1110 && regla != 1120 && (regla < 1020 || regla > 1022) && gui != null) {
+            gui.getModeloErrores().addRow(new Object[] {
+                String.valueOf(regla), mensajeReglaSemantica2(regla, lexemaError), lexemaError, "Semántica 2", String.valueOf(linea) });
+        }
+    }
+
+    private String mensajeReglaSemantica2(int regla, String lexema) {
+        switch (regla) {
+            case 1010: return "La expresión debe ser lógica para IF";
+            case 1011: return "La expresión debe ser lógica para ELSEIF";
+            case 1012: return "La expresión debe ser lógica para WHILE";
+            case 1013: return "La expresión debe ser lógica para DO-WHILE";
+            case 1030: return "La cantidad de dimensiones en un arreglo debe ser igual a la declarada.";
+            case 1040: return "La expresión de la lista de arreglo debe ser entera.";
+            case 1050: return "Los límites al usar un arreglo deben estar en el mismo rango de la declaración.";
+            case 1060: return "La expresión del switch debe ser de tipo decimal, cadena o variant";
+            case 1061: return "El caso es del mismo tipo que la expresion de SWITCH";
+            case 1070:
+                if (lexema.startsWith("!")) return "El operador ! solo puede ser utilizado con una expresión lógica";
+                if (lexema.startsWith("~")) return "El operador ~ solo puede ser utilizado con valores numéricos enteros, octales, binarios o hexadecimales";
+                return "El operador unario solo puede ser utilizado con valores numéricos enteros";
+            case 1080: return "En el for debe inicializarse un identificador con =";
+            case 1081: return "La expresión debe ser lógica para FOR";
+            case 1082: return "El incremento o decremento del for debe ser ++id o --id";
+            case 1083: return "En el for each de cadenas el identificador debe ser decimal y recorrer una cadena";
+            case 1084: return "En el for each el identificador debe ser del mismo tipo que el arreglo";
+            case 1090: return "El identificador debe ser de clase variable, parámetro o arreglo para recibir un valor";
+            case 1130: return "El return debe estar dentro de una función";
+            case 1131: return "El tipo del retorno debe ser igual al tipo de la función";
+            case 1140: return "Un procedimiento no debe tener retorno";
+            case 1150: return "La cantidad de parámetros debe ser igual a la declarada";
+            default: return "El tipo del parámetro debe ser igual al declarado";
+        }
+    }
+
+    // Etiqueta de tipo con el formato de la evidencia: Dec, Real, Cadena, Boolean...
+    private String etiquetaT(String tipo) {
+        return etiquetaTipo(tipo);
     }
 
     // Reglas 1020-1022: el destino debe ser del mismo tipo que la expresión. Un tipo variant (no declarado) se acepta.
@@ -1830,17 +1938,17 @@ public class Parser {
                 tipoResultado = "variant";
                 detalle = "operacion incompatible entre " + etiquetaTipo(tipoDestino) + " y " + etiquetaTipo(tipoValor);
                 int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
-                erroresTiposPendientes.add(new Object[] {
+                if (!asignacionIncompatibleReportada) erroresTiposPendientes.add(new Object[] {
                     String.valueOf(celda),
                     "Tipos incompatibles para '" + operador + "': " + etiquetaTipo(tipoDestino) + " y " + etiquetaTipo(tipoValor),
-                    lexema, "Semántico", String.valueOf(linea) });
+                    lexema, "Semántica 1", String.valueOf(linea) });
             } else {
                 tipoResultado = tipoDeCodigo(celda);
             }
         }
         String descripcion = prefijoDescripcion + (detalle != null ? detalle + "."
             : "destino " + etiquetaTipo(tipoDestino) + ", resultado " + etiquetaTipo(tipoResultado) + ".");
-        asignacionPendiente = new Object[] { regla, descripcion, aceptada, lexema };
+        asignacionPendiente = new Object[] { regla, descripcion, aceptada, valor.valor, etiquetaT(tipoDestino.equals("variant") ? tipoValor : tipoDestino), lexema };
     }
 
     private boolean esAsignacion(String operador) {
@@ -1892,7 +2000,7 @@ public class Parser {
                 String.valueOf(celda),
                 "Tipos incompatibles para '" + operador + "' (" + nombre + "): "
                     + etiquetaTipo(operandos[0].tipo) + " y " + etiquetaTipo(operandos[1].tipo),
-                operandos[0].valor + " " + operador + " " + operandos[1].valor, "Semántico", String.valueOf(linea) });
+                operandos[0].valor + " " + operador + " " + operandos[1].valor, "Semántica 1", String.valueOf(linea) });
             return "variant";
         }
         return tipoDeCodigo(celda);

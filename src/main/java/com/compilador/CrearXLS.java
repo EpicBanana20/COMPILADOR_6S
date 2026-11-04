@@ -52,11 +52,12 @@ public class CrearXLS {
             Map<Integer, Integer> erroresPorAmbito = parser != null ? parser.getErroresPorAmbito() : new java.util.LinkedHashMap<>();
             List<int[]> eventosAmbito = parser != null ? parser.getEventosAmbito() : new ArrayList<>();
             List<Object[]> resumenTemporales = parser != null ? parser.getResumenTemporales() : new ArrayList<>();
-            generarExcel(rutaAbsoluta, gui.getModeloTokens(), gui.getModeloErrores(), gui.getModeloPila(), contadoresSintaxis, totalErroresSintacticos, tablaSimbolos, erroresPorAmbito, eventosAmbito, resumenTemporales);
+            List<Object[]> registroSemantica2 = parser != null ? parser.getRegistroSemantica2() : new ArrayList<>();
+            generarExcel(rutaAbsoluta, gui.getModeloTokens(), gui.getModeloErrores(), gui.getModeloPila(), contadoresSintaxis, totalErroresSintacticos, tablaSimbolos, erroresPorAmbito, eventosAmbito, resumenTemporales, registroSemantica2);
         }
     }
 
-    private void generarExcel(String rutaAbsoluta, DefaultTableModel modeloTokens, DefaultTableModel modeloErrores, DefaultTableModel modeloContadores, Map<String, Integer> contadoresSintaxis, int totalErroresSintacticos, TablaSimbolos tablaSimbolos, Map<Integer, Integer> erroresPorAmbito, List<int[]> eventosAmbito, List<Object[]> resumenTemporales) {
+    private void generarExcel(String rutaAbsoluta, DefaultTableModel modeloTokens, DefaultTableModel modeloErrores, DefaultTableModel modeloContadores, Map<String, Integer> contadoresSintaxis, int totalErroresSintacticos, TablaSimbolos tablaSimbolos, Map<Integer, Integer> erroresPorAmbito, List<int[]> eventosAmbito, List<Object[]> resumenTemporales, List<Object[]> registroSemantica2) {
         try (Workbook workbook = new XSSFWorkbook()) {
 
             // =========================================================
@@ -115,6 +116,12 @@ public class CrearXLS {
             Sheet sheetTemporales = workbook.createSheet("Semantica 1");
             escribirTablaTemporales(sheetTemporales, resumenTemporales, estiloEncabezado, estiloCentrado);
 
+            // --- 8. Hojas de Semantica 2 (registro de reglas y totales por regla) ---
+            Sheet sheetSem2Base = workbook.createSheet("Semantica 2-Base");
+            escribirSemantica2Base(sheetSem2Base, registroSemantica2, estiloEncabezado, estiloCentrado);
+            Sheet sheetSem2Total = workbook.createSheet("Semantica 2-Total");
+            escribirSemantica2Total(sheetSem2Total, registroSemantica2, estiloEncabezado, estiloCentrado);
+
             // Guardamos el archivo físicamente
             try (FileOutputStream fileOut = new FileOutputStream(rutaAbsoluta)) {
                 workbook.write(fileOut);
@@ -168,14 +175,29 @@ public class CrearXLS {
             cell.setCellStyle(estilo);
         }
 
-        for (int r = 0; r < modelo.getRowCount(); r++) {
-            Row row = sheet.createRow(r + 1);
+        // Los errores se listan por línea (los de ámbito, Semántica 1 y Semántica 2 se agregan en momentos distintos).
+        // El orden es estable: en la misma línea se conserva el orden en que se detectaron.
+        List<Integer> orden = new ArrayList<>();
+        for (int r = 0; r < modelo.getRowCount(); r++) orden.add(r);
+        orden.sort((x, y) -> Integer.compare(lineaDeError(modelo, x), lineaDeError(modelo, y)));
+
+        for (int fila = 0; fila < orden.size(); fila++) {
+            int r = orden.get(fila);
+            Row row = sheet.createRow(fila + 1);
             for (int c = 0; c < 5; c++) {
                 Object val = modelo.getValueAt(r, c);
                 Cell cell = row.createCell(c);
                 cell.setCellValue(val != null ? val.toString() : "");
                 cell.setCellStyle(estilo);
             }
+        }
+    }
+
+    private int lineaDeError(DefaultTableModel modelo, int fila) {
+        try {
+            return Integer.parseInt(String.valueOf(modelo.getValueAt(fila, 4)).trim());
+        } catch (NumberFormatException e) {
+            return Integer.MAX_VALUE;
         }
     }
 
@@ -456,6 +478,86 @@ public class CrearXLS {
             Cell c = totalRow.createCell(i + 1);
             c.setCellValue(String.valueOf(totales[i]));
             c.setCellStyle(estilo);
+        }
+    }
+
+    // Reglas de Semántica 2, en el orden de la hoja "Semantica 2-Total" de la evidencia
+    private static final int[] REGLAS_SEMANTICA2 = {
+        1010, 1011, 1012, 1013, 1020, 1021, 1022, 1030, 1040, 1050, 1060, 1061, 1070,
+        1080, 1081, 1082, 1083, 1084, 1090, 1100, 1110, 1120, 1130, 1131, 1140, 1150, 1160
+    };
+
+    // Hoja "Semantica 2-Base": una fila por regla evaluada. Registro: {linea, regla, descripcion, ACEPT/ERROR, lexema, ambito, tope de pila}
+    private void escribirSemantica2Base(Sheet sheet, List<Object[]> registro, CellStyle estiloEncabezado, CellStyle estilo) {
+        String[] headers = {"Regla", "Tope Pila", "Valor Real", "Linea", "Edo", "Ambito"};
+        Row headerRow = sheet.createRow(0);
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(estiloEncabezado);
+        }
+        sheet.setColumnWidth(0, 8 * 256);
+        sheet.setColumnWidth(1, 11 * 256);
+        sheet.setColumnWidth(2, 40 * 256);
+        sheet.setColumnWidth(3, 8 * 256);
+        sheet.setColumnWidth(4, 9 * 256);
+        sheet.setColumnWidth(5, 9 * 256);
+
+        int filaExcel = 1;
+        for (Object[] fila : registro) {
+            Row row = sheet.createRow(filaExcel++);
+            Cell cRegla = row.createCell(0);
+            cRegla.setCellValue((Integer) fila[1]);
+            cRegla.setCellStyle(estilo);
+            Cell cTope = row.createCell(1);
+            cTope.setCellValue(String.valueOf(fila[6]));
+            cTope.setCellStyle(estilo);
+            Cell cValor = row.createCell(2);
+            cValor.setCellValue(String.valueOf(fila[4]));
+            cValor.setCellStyle(estilo);
+            Cell cLinea = row.createCell(3);
+            cLinea.setCellValue((Integer) fila[0]);
+            cLinea.setCellStyle(estilo);
+            Cell cEdo = row.createCell(4);
+            cEdo.setCellValue("ACEPT".equals(fila[3]) ? "Acept" : "ERROR");
+            cEdo.setCellStyle(estilo);
+            Cell cAmbito = row.createCell(5);
+            cAmbito.setCellValue((Integer) fila[5]);
+            cAmbito.setCellStyle(estilo);
+        }
+    }
+
+    // Hoja "Semantica 2-Total": por regla, cuántas veces apareció, cuántas se aceptaron y cuántas fueron error
+    private void escribirSemantica2Total(Sheet sheet, List<Object[]> registro, CellStyle estiloEncabezado, CellStyle estilo) {
+        String[] headers = {"Reglas", "Aparecen", "Aceptada", "Errores"};
+        Row headerRow = sheet.createRow(0);
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(estiloEncabezado);
+        }
+
+        Map<Integer, int[]> conteos = new HashMap<>();
+        for (int regla : REGLAS_SEMANTICA2) conteos.put(regla, new int[2]);
+        for (Object[] fila : registro) {
+            int[] c = conteos.get((Integer) fila[1]);
+            if (c == null) continue;
+            if ("ACEPT".equals(fila[3])) c[0]++; else c[1]++;
+        }
+
+        int filaExcel = 1;
+        for (int regla : REGLAS_SEMANTICA2) {
+            int[] c = conteos.get(regla);
+            int[] valores = {c[0] + c[1], c[0], c[1]};
+            Row row = sheet.createRow(filaExcel++);
+            Cell cRegla = row.createCell(0);
+            cRegla.setCellValue(regla);
+            cRegla.setCellStyle(estilo);
+            for (int i = 0; i < valores.length; i++) {
+                Cell cell = row.createCell(i + 1);
+                cell.setCellValue(valores[i]);
+                cell.setCellStyle(estilo);
+            }
         }
     }
 
