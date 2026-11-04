@@ -51,10 +51,6 @@ public class Main {
             CrearXLS logicaExcel = new CrearXLS(ventana, parser);
             ventana.getBtnCrearXls().addActionListener(e -> logicaExcel.ejecutar());
 
-            // CREACIÓN DEL TXT (Semántica 2: registro de reglas)
-            CrearTxtSemantica2 logicaTxtSemantica2 = new CrearTxtSemantica2(ventana, parser);
-            ventana.getBtnCrearTxtSemantica2().addActionListener(e -> logicaTxtSemantica2.ejecutar());
-
             ventana.setVisible(true);
         });
     }

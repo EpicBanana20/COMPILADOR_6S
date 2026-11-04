@@ -8,7 +8,6 @@ com\compilador\Parser$ContextoArreglo.class
 com\compilador\CompiladorGUI$3.class
 com\compilador\CrearXLS.class
 com\compilador\CompiladorGUI$4.class
-com\compilador\CrearTxtSemantica2.class
 com\compilador\Parser$IndiceArreglo.class
 com\compilador\Parser$1.class
 com\compilador\TablaSimbolos.class
