@@ -57,6 +57,8 @@ public class Parser {
     private int reglaCondicion;             // regla de la condición abierta (1010-1013)
     private String palabraCondicion;        // if / elseif / while / do-while
     private Stack<ContextoArreglo> pilaContextosArreglo = new Stack<>(); // accesos id[...] en curso (reglas 1030-1050)
+    private Stack<ContextoLlamada> pilaContextosLlamada = new Stack<>(); // llamadas id(...) en curso (reglas 1150-1160)
+    private int posInicioReturn;            // primer token de la expresión del return en curso (reglas 1130-1131)
     private Stack<Object[]> pilaSwitch = new Stack<>(); // switch en curso: {tipo base (String o null), lexema de la expresión} (reglas 1060-1061)
     private boolean unarioPropioAbierto;    // un unario fuera de toda expresión abrió su propio contexto (regla 1070)
     private String ultimoAccesoArreglo;     // texto del último acceso id[...] cerrado (destino de una asignación a arreglo)
@@ -219,6 +221,23 @@ public class Parser {
         String texto;
         String tipo;
         Long valor;
+        String lexema;                        // valor del operando del índice (constante, id o temporal)
+    }
+
+    // Un argumento de una llamada: su texto, el valor de su operando y su tipo
+    private static class ArgumentoLlamada {
+        String texto;
+        String tipo;
+    }
+
+    // Una llamada id(a1, a2, ...) mientras se analiza
+    private static class ContextoLlamada {
+        Token id;
+        int posId;
+        int inicioArgumento;
+        boolean propia;                       // la llamada abrió su propia expresión (fuera de una asignación o condición)
+        int operandosAlAbrir;
+        List<ArgumentoLlamada> argumentos = new ArrayList<>();
     }
 
     // Un acceso id[i1, i2, ...] mientras se analiza
@@ -229,6 +248,7 @@ public class Parser {
         int inicioIndice;
         boolean indicePropio;                 // el índice abrió su propia expresión (fuera de una asignación o condición)
         int operandosAlAbrir;
+        boolean cortado;                      // una regla de un índice falló: no se evalúan los demás
     }
 
     public static class Token {
@@ -305,6 +325,7 @@ public class Parser {
         this.registroSemantica2 = new ArrayList<>();
         this.asignacionPendiente = null;
         this.pilaContextosArreglo = new Stack<>();
+        this.pilaContextosLlamada = new Stack<>();
         this.pilaSwitch = new Stack<>();
         this.unarioPropioAbierto = false;
         this.ultimoAccesoArreglo = null;
@@ -353,17 +374,26 @@ public class Parser {
             if (cimaPila.equals("802")) {
                 pila.pop();
                 int ambitoPadreActual = pilaAmbitos.peek();
+                // Reglas 1110 y 1120: el procedimiento (def sin tipo) o la función (def con tipo) se declara en el ámbito
+                // que la contiene (antes de abrir el suyo)
+                boolean esDef = posicionActual >= 2 && tokens.get(posicionActual - 2).token.equals("-84");
+                boolean sinPrefijo = ultimoIdConsumido != null && "registro".equals(CODIGO_A_TIPO.get(ultimoIdConsumido.token));
+                boolean esProc = esDef && sinPrefijo;
+                if (esDef && ultimoIdConsumido != null) {
+                    registrarSemantica2(ultimoIdConsumido.linea, esProc ? 1110 : 1120, esProc ? "Procedimiento" : "Funcion",
+                        !existeEnAmbito(ambitoPadreActual, ultimoIdConsumido.lexema), ultimoIdConsumido.lexema);
+                }
                 abrirAmbito(tokenActual);
                 if (ultimoIdConsumido != null) {
                     boolean duplicado = existeEnAmbito(ambitoPadreActual, ultimoIdConsumido.lexema);
                     if (duplicado) {
                         registrarErrorSemantico(546, "Variable ya declarada en este ámbito: '" + ultimoIdConsumido.lexema + "'", ultimoIdConsumido,ambitoPadreActual);
                     }
-                    boolean esReg = "registro".equals(CODIGO_A_TIPO.get(ultimoIdConsumido.token));
+                    boolean esReg = sinPrefijo && !esProc;
                     Simbolo fun = new Simbolo(
                         ultimoIdConsumido.lexema,
-                        esReg ? "reg" : CODIGO_A_TIPO.get(ultimoIdConsumido.token),
-                        esReg ? "reg" : "fun",
+                        esReg ? "reg" : esProc ? "proc" : CODIGO_A_TIPO.get(ultimoIdConsumido.token),
+                        esReg ? "reg" : esProc ? "proc" : "fun",
                         ambitoPadreActual,
                         "", "0", "0",
                         String.valueOf(contadorAmbitos));
@@ -669,19 +699,23 @@ public class Parser {
                     IndiceArreglo indice = new IndiceArreglo();
                     indice.texto = textoTokens(ctx.inicioIndice, posicionActual - 1);
                     indice.valor = valorConstanteUnica(ctx.inicioIndice, posicionActual - 1);
+                    indice.lexema = indice.texto;
                     if (ctx.indicePropio) {
                         profundidadExpresion--;
                         indice.tipo = (pilaOperandos.size() == 1) ? pilaOperandos.peek().tipo : "variant";
+                        if (pilaOperandos.size() == 1) indice.lexema = pilaOperandos.peek().valor;
                         for (Object[] fila : erroresTiposPendientes) {
                             if (gui != null) gui.getModeloErrores().addRow(fila);
                         }
                         reiniciarExpresion();
                     } else {
                         indice.tipo = (pilaOperandos.size() > ctx.operandosAlAbrir) ? pilaOperandos.peek().tipo : "variant";
+                        if (pilaOperandos.size() > ctx.operandosAlAbrir) indice.lexema = pilaOperandos.peek().valor;
                         // El índice no es operando de la expresión que lo contiene: solo queda el arreglo
                         while (pilaOperandos.size() > ctx.operandosAlAbrir) pilaOperandos.pop();
                     }
                     ctx.indices.add(indice);
+                    evaluarIndiceArreglo(ctx, indice); // reglas 1030-1050 de esta dimensión
                 }
                 continue;
             }
@@ -690,7 +724,83 @@ public class Parser {
                 if (!pilaContextosArreglo.isEmpty()) {
                     ContextoArreglo cierre = pilaContextosArreglo.pop();
                     ultimoAccesoArreglo = textoTokens(cierre.posId, posicionActual); // incluye el ']' aún sin consumir
-                    evaluarAccesoArreglo(cierre);
+                    evaluarDimensionesUsadas(cierre);
+                }
+                continue;
+            }
+
+            // ==================== SEMÁNTICA 2: LLAMADAS A FUNCIÓN (837, 838, 850) ====================
+            // 837 abre la llamada tras el '(', 850 cierra cada argumento, 838 cierra la llamada y evalúa las reglas 1150-1160.
+            if (cimaPila.equals("837")) {
+                pila.pop();
+                ContextoLlamada llamada = new ContextoLlamada();
+                llamada.posId = posicionActual - 2;
+                llamada.id = (llamada.posId >= 0 && llamada.posId < tokens.size()) ? tokens.get(llamada.posId) : ultimoIdConsumido;
+                llamada.inicioArgumento = posicionActual;
+                if (profundidadExpresion == 0) {
+                    llamada.propia = true;
+                    profundidadExpresion++;
+                }
+                llamada.operandosAlAbrir = pilaOperandos.size();
+                pilaContextosLlamada.push(llamada);
+                continue;
+            }
+            if (cimaPila.equals("850")) {
+                pila.pop();
+                if (!pilaContextosLlamada.isEmpty()) {
+                    ContextoLlamada llamada = pilaContextosLlamada.peek();
+                    ArgumentoLlamada argumento = new ArgumentoLlamada();
+                    argumento.texto = textoTokensEspaciado(llamada.inicioArgumento, posicionActual - 1);
+                    argumento.tipo = "variant";
+                    if (pilaOperandos.size() > llamada.operandosAlAbrir) argumento.tipo = pilaOperandos.peek().tipo;
+                    // El argumento no es operando de la expresión que contiene la llamada
+                    while (pilaOperandos.size() > llamada.operandosAlAbrir) pilaOperandos.pop();
+                    llamada.argumentos.add(argumento);
+                    llamada.inicioArgumento = posicionActual + 1; // salta la coma
+                }
+                continue;
+            }
+            if (cimaPila.equals("838")) {
+                pila.pop();
+                if (!pilaContextosLlamada.isEmpty()) {
+                    ContextoLlamada llamada = pilaContextosLlamada.pop();
+                    if (llamada.propia) {
+                        profundidadExpresion--;
+                        for (Object[] fila : erroresTiposPendientes) {
+                            if (gui != null) gui.getModeloErrores().addRow(fila);
+                        }
+                        reiniciarExpresion();
+                    }
+                    evaluarLlamada(llamada, textoTokensEspaciado(llamada.posId, posicionActual - 1));
+                }
+                continue;
+            }
+
+            // ==================== SEMÁNTICA 2: RETURN (851, 852) ====================
+            // 851 abre la expresión del return, 852 la cierra y evalúa las reglas 1130-1131.
+            if (cimaPila.equals("851")) {
+                pila.pop();
+                posInicioReturn = posicionActual;
+                if (profundidadExpresion == 0) {
+                    lineaApertura = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
+                    contadoresTemporalesInicio = new LinkedHashMap<>(contadoresTemporales);
+                }
+                profundidadExpresion++;
+                continue;
+            }
+            if (cimaPila.equals("852")) {
+                pila.pop();
+                profundidadExpresion--;
+                if (profundidadExpresion == 0) {
+                    if (pilaOperandos.size() == 1) {
+                        evaluarReturn(pilaOperandos.peek(), textoTokensEspaciado(posInicioReturn, posicionActual - 1));
+                        for (Object[] fila : erroresTiposPendientes) {
+                            if (gui != null) gui.getModeloErrores().addRow(fila);
+                        }
+                    } else {
+                        contadoresTemporales = contadoresTemporalesInicio;
+                    }
+                    reiniciarExpresion();
                 }
                 continue;
             }
@@ -1387,14 +1497,8 @@ public class Parser {
         pilaOperandos.push(new Operando(prefijo, temporal, tipo));
     }
 
-    // Reglas 1030 (dimensiones), 1040 (índice entero) y 1050 (rango) de un acceso id[i1, i2, ...]
-    private void evaluarAccesoArreglo(ContextoArreglo ctx) {
-        if (ctx.id == null) return;
-        Simbolo simbolo = buscarSimbolo(ctx.id.lexema);
-        if (simbolo == null) return; // no declarado: ya lo reporta la Semántica 1
-
-        int usadas = ctx.indices.size();
-        int declaradas = 0;
+    // Tamaños declarados de las dimensiones de un arreglo; vacío si el símbolo no es un arreglo
+    private List<Integer> tamanosArreglo(Simbolo simbolo) {
         List<Integer> tamanos = new ArrayList<>();
         if ("arr".equals(simbolo.getClase()) && simbolo.getTarr() != null && !simbolo.getTarr().isEmpty()) {
             for (String dim : simbolo.getTarr().split(",")) {
@@ -1404,48 +1508,110 @@ public class Parser {
                     tamanos.add(null);
                 }
             }
-            declaradas = tamanos.size();
         }
-        String acceso = textoTokens(ctx.posId, posicionActual); // incluye el ']' que aún no se consumió
+        return tamanos;
+    }
+
+    // Reglas 1030 (dimensión), 1040 (índice entero) y 1050 (rango) del índice recién cerrado de un acceso id[i1, i2, ...]
+    // Jerarquía 1030 > 1040 > 1050: si una regla falla, ni ese índice ni los siguientes evalúan las demás.
+    private void evaluarIndiceArreglo(ContextoArreglo ctx, IndiceArreglo indice) {
+        if (ctx.id == null || ctx.cortado) return;
+        Simbolo simbolo = buscarSimbolo(ctx.id.lexema);
+        if (simbolo == null) { // no declarado: ya lo reporta la regla 1100
+            ctx.cortado = true;
+            return;
+        }
+        List<Integer> tamanos = tamanosArreglo(simbolo);
+        int n = ctx.indices.size();
         int linea = ctx.id.linea;
 
+        boolean existeDimension = n <= tamanos.size();
         registrarSemantica2(linea, 1030,
-            "Lista de arreglo: dimensiones usadas " + usadas + ", declaradas " + declaradas + ".", usadas == declaradas, acceso);
-        // Jerarquía 1030 > 1040 > 1050: si una regla falla, las siguientes ya no se evalúan
-        if (usadas != declaradas || declaradas == 0) return;
+            "Lista de arreglo: la dimension " + n + (existeDimension ? " esta declarada." : " no esta declarada (declaradas "
+                + tamanos.size() + ")."),
+            existeDimension, ctx.id.lexema);
+        if (!existeDimension) { ctx.cortado = true; return; }
 
-        String malIndice = null;
-        for (IndiceArreglo i : ctx.indices) {
-            boolean entero = i.tipo.equals("dec") || i.tipo.equals("bin") || i.tipo.equals("oct")
-                || i.tipo.equals("hex") || i.tipo.equals("variant");
-            if (!entero) {
-                malIndice = "el indice " + i.texto + " debe ser entero, es " + etiquetaTipo(i.tipo);
-                break;
-            }
-        }
+        boolean entero = indice.tipo.equals("dec") || indice.tipo.equals("bin") || indice.tipo.equals("oct")
+            || indice.tipo.equals("hex") || indice.tipo.equals("variant");
         registrarSemantica2(linea, 1040,
-            malIndice == null ? "Lista de arreglo: los indices son enteros." : "Lista de arreglo: " + malIndice + ".",
-            malIndice == null, acceso);
-        if (malIndice != null) return;
+            entero ? "Lista de arreglo: el indice " + n + " es entero."
+                   : "Lista de arreglo: el indice " + indice.texto + " debe ser entero, es " + etiquetaTipo(indice.tipo) + ".",
+            entero, indice.lexema);
+        if (!entero) { ctx.cortado = true; return; }
 
-        String fuera = null;
-        for (int d = 0; d < Math.min(usadas, declaradas) && fuera == null; d++) {
-            IndiceArreglo i = ctx.indices.get(d);
-            Integer tamano = tamanos.get(d);
-            if (i.valor != null && tamano != null && (i.valor < 0 || i.valor >= tamano)) {
-                fuera = "el indice " + i.valor + " de la dimension " + (d + 1) + " esta fuera del rango 0.." + (tamano - 1);
+        Integer tamano = tamanos.get(n - 1);
+        boolean fuera = indice.valor != null && tamano != null && (indice.valor < 0 || indice.valor >= tamano);
+        String descripcion = fuera
+            ? "Lista de arreglo: el indice " + indice.valor + " de la dimension " + n + " esta fuera del rango 0.." + (tamano - 1) + "."
+            : indice.valor != null ? "Lista de arreglo: el indice " + n + " esta dentro del rango declarado."
+                : "Lista de arreglo: el indice " + n + " no es constante, no se valida en compilacion.";
+        registrarSemantica2(linea, 1050, descripcion, !fuera, indice.lexema);
+        if (fuera) ctx.cortado = true;
+    }
+
+    // Regla 1030 al cerrar el acceso: no pueden usarse menos dimensiones de las declaradas
+    private void evaluarDimensionesUsadas(ContextoArreglo ctx) {
+        if (ctx.id == null || ctx.cortado) return;
+        Simbolo simbolo = buscarSimbolo(ctx.id.lexema);
+        if (simbolo == null) return;
+        int declaradas = tamanosArreglo(simbolo).size();
+        int usadas = ctx.indices.size();
+        if (usadas < declaradas) {
+            registrarSemantica2(ctx.id.linea, 1030,
+                "Lista de arreglo: dimensiones usadas " + usadas + ", declaradas " + declaradas + ".", false, ctx.id.lexema);
+        }
+    }
+
+    // Reglas 1150 (parámetro declarado) y 1160 (tipo del parámetro) de una llamada id(a1, a2, ...) a una función declarada
+    private void evaluarLlamada(ContextoLlamada llamada, String textoLlamada) {
+        if (llamada.id == null) return;
+        Simbolo funcion = buscarSimbolo(llamada.id.lexema);
+        if (funcion == null || !("fun".equals(funcion.getClase()) || "proc".equals(funcion.getClase()))) return; // no declarada o no es rutina
+        List<Simbolo> parametros = new ArrayList<>();
+        for (Simbolo s : tablaSimbolos.getFilas()) {
+            if ("par".equals(s.getClase()) && funcion.getId().equals(s.getTParr())) parametros.add(s);
+        }
+        int linea = llamada.id.linea;
+        int total = Math.max(parametros.size(), llamada.argumentos.size());
+        for (int n = 1; n <= total; n++) {
+            boolean existe = n <= parametros.size() && n <= llamada.argumentos.size();
+            registrarSemantica2(linea, 1150,
+                "Llamada: el parametro " + n + (existe ? " esta declarado." : parametros.size() < n
+                    ? " no esta declarado (la funcion recibe " + parametros.size() + ")." : " no recibio argumento."),
+                existe, textoLlamada);
+            if (!existe) return;
+            Simbolo parametro = parametros.get(n - 1);
+            ArgumentoLlamada argumento = llamada.argumentos.get(n - 1);
+            boolean tipoIgual = argumento.tipo.equals("variant") || argumento.tipo.equals(parametro.getTipo());
+            registrarSemantica2(linea, 1160,
+                "Llamada: parametro " + n + " " + etiquetaTipo(parametro.getTipo()) + ", argumento " + etiquetaTipo(argumento.tipo) + ".",
+                tipoIgual, argumento.texto);
+        }
+    }
+
+    // Reglas 1130 (return dentro de una función) y 1131 (el tipo retornado es el de la función)
+    private void evaluarReturn(Operando valor, String textoExpresion) {
+        Simbolo funcion = null;
+        for (int i = pilaAmbitos.size() - 1; i >= 0 && funcion == null; i--) {
+            for (Simbolo s : tablaSimbolos.getFilas()) {
+                if (("fun".equals(s.getClase()) || "proc".equals(s.getClase())) && String.valueOf(pilaAmbitos.get(i)).equals(s.getTParr())) {
+                    funcion = s;
+                    break;
+                }
             }
         }
-        boolean sinVerificar = false;
-        for (int d = 0; d < Math.min(usadas, declaradas); d++) {
-            if (ctx.indices.get(d).valor == null) sinVerificar = true;
+        int linea = (lineaApertura > 0) ? lineaApertura : (ultimoTokenConsumido != null ? ultimoTokenConsumido.linea : 0);
+        if (funcion != null && "proc".equals(funcion.getClase())) { // regla 1140: un procedimiento no retorna valor
+            registrarSemantica2(linea, 1140, "Un procedimiento no debe tener return", false, "return " + textoExpresion);
+            return;
         }
-        String okDesc = sinVerificar
-            ? "Lista de arreglo: indices constantes dentro del rango declarado (los demas no se validan en compilacion)."
-            : "Lista de arreglo: los indices estan dentro del rango declarado.";
-        registrarSemantica2(linea, 1050,
-            fuera == null ? okDesc : "Lista de arreglo: " + fuera + ".",
-            fuera == null, acceso);
+        registrarSemantica2(linea, 1130, "Return dentro de una funcion", funcion != null, funcion != null ? funcion.getId() : "return");
+        if (funcion == null) return;
+        boolean tipoIgual = valor.tipo.equals("variant") || valor.tipo.equals(funcion.getTipo());
+        registrarSemantica2(linea, 1131,
+            "Return: la funcion es " + etiquetaTipo(funcion.getTipo()) + " y retorna " + etiquetaTipo(valor.tipo) + ".",
+            tipoIgual, "return " + textoExpresion);
     }
 
     private boolean esUnarioSemantica2(String operador) {
@@ -1601,6 +1767,16 @@ public class Parser {
         StringBuilder sb = new StringBuilder();
         for (int i = Math.max(desde, 0); i <= hasta && i < tokens.size(); i++) {
             sb.append(tokens.get(i).lexema);
+        }
+        return sb.toString();
+    }
+
+    // Igual que textoTokens, pero con un espacio después de cada coma: #Df(1, "a")
+    private String textoTokensEspaciado(int desde, int hasta) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = Math.max(desde, 0); i <= hasta && i < tokens.size(); i++) {
+            sb.append(tokens.get(i).lexema);
+            if (tokens.get(i).lexema.equals(",") && i < hasta) sb.append(' ');
         }
         return sb.toString();
     }
