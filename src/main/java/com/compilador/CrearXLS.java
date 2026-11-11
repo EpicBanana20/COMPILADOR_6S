@@ -35,7 +35,7 @@ public class CrearXLS {
 
     public void ejecutar() {
         FileDialog dialogo = new FileDialog((Frame) null, "Guardar reporte Léxico en Excel", FileDialog.SAVE);
-        dialogo.setFile("Sem2_MezaAlex_1.xlsx"); 
+        dialogo.setFile("Sem3_MezaAlex_1.xlsx"); 
         dialogo.setVisible(true);
 
         String dir = dialogo.getDirectory();
@@ -561,6 +561,7 @@ public class CrearXLS {
             int errores = 0;
             for (Object[] fila : registro) {
                 if (fila.length < 8 || !entrada.getKey().equals(fila[7])) continue;
+                if ((Integer) fila[1] == 2001) continue; // la fila de entrada de CLEAR no se cuenta, solo su salida (2011)
                 if ("ACEPT".equals(fila[3])) aceptados++; else errores++;
             }
             Row row = sheet.createRow(filaExcel++);

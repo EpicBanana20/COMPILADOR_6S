@@ -32,7 +32,7 @@
 //   2010  Real, Exp, id                              pred_p1 succ_p1
 // Reglas de SALIDA
 //   2011  Void: CLEAR, copy, val        2012  Exp: sqrt sqrtv sin cos tan sqr
-//   2013  pow (tipo de p1)              2014  Dec: strlen
+//   2013  pow (tipo de p1; Real -> Exp)            2014  Dec: strlen
 //   2015  Cadena: concat, chr           2016  Boolean: str
 //   2017  pred, succ (tipo de p1)       2018  inc, dec (tipo de p1)
 // Si p1 es invalido en pow/pred/succ la salida es el maximo (Exp); en
@@ -41,7 +41,7 @@
 var #Bb, #Oo, #Dx, #Dy, #Xh, $r, ¿e, @c, @d, ¡f;
 main() {
 // ----------------------------------------------------------------
-// 1. CLEAR (salida 2011, sin entradas)
+// 1. CLEAR (entrada 2001 sin parametros, salida 2011)
 // ----------------------------------------------------------------
 CLEAR; // OK
 // ----------------------------------------------------------------
@@ -104,7 +104,7 @@ CLEAR; // OK
 ¿e = sqr("hola"); // ERROR 2002 sqr_p1
 ¿e = sqr(true); // ERROR 2002 sqr_p1
 // ----------------------------------------------------------------
-// 3. Regla 2003: pow_p1 (todos los numericos; la salida 2013 es el tipo de p1)
+// 3. Regla 2003: pow_p1 (todos los numericos; la salida 2013 es el tipo de p1, salvo Real que da Exp)
 // ----------------------------------------------------------------
 #Bb = POW(#Bb, 2); // OK
 #Bb = POW(xb101, 2); // OK
@@ -114,8 +114,8 @@ CLEAR; // OK
 #Dx = POW(9, 2); // OK
 #Xh = POW(#Xh, 2); // OK
 #Xh = POW(xl1F, 2); // OK
-$r = POW($r, 2); // OK
-$r = POW(2.5, 2); // OK
+$r = POW($r, 2); // ERROR 2013 pow (Real -> Exp; asignacion incompatible, error de Semantica 1)
+$r = POW(2.5, 2); // ERROR 2013 pow (Real -> Exp; asignacion incompatible, error de Semantica 1)
 ¿e = POW(¿e, 2); // OK
 ¿e = POW(2^3, 2); // OK
 ¿e = POW(@c, 2); // ERROR 2003 pow_p1

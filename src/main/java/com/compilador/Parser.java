@@ -860,8 +860,16 @@ public class Parser {
                         argumento.valorCuadruplo = operando.valor;
                         if (!sentenciaSuelta) argumento.texto = operando.valor;
                     }
-                    argumento.esId = desde == hasta && desde >= 0 && desde < tokens.size()
-                        && CODIGO_A_TIPO.containsKey(tokens.get(desde).token);
+                    boolean empiezaConId = desde >= 0 && desde < tokens.size() && CODIGO_A_TIPO.containsKey(tokens.get(desde).token);
+                    // Un id solo, o un elemento de arreglo id[...] completo, cuenta como identificador
+                    argumento.esId = empiezaConId && (desde == hasta
+                        || (desde + 1 < tokens.size() && tokens.get(desde + 1).lexema.equals("[") && cierreEn(desde + 1) == hasta));
+                    // Una llamada a un procedimiento id(...) es Void; null se rechaza en cualquier parámetro
+                    if (empiezaConId && desde + 1 < tokens.size() && tokens.get(desde + 1).lexema.equals("(") && cierreEn(desde + 1) == hasta) {
+                        Simbolo rutina = buscarSimbolo(tokens.get(desde).lexema);
+                        if (rutina != null && "proc".equals(rutina.getClase())) argumento.tipo = "void";
+                    }
+                    if (desde == hasta && desde >= 0 && desde < tokens.size() && tokens.get(desde).token.equals("-107")) argumento.tipo = "null";
                     argumento.valorConstante = valorConstanteUnica(desde, hasta);
                     // El argumento no es operando de la expresión que contiene la llamada
                     while (pilaOperandos.size() > funcion.operandosAlAbrir) pilaOperandos.pop();
@@ -902,6 +910,7 @@ public class Parser {
             if (cimaPila.equals("856")) {
                 pila.pop();
                 Token clear = (posicionActual >= 1 && posicionActual <= tokens.size()) ? tokens.get(posicionActual - 1) : ultimoTokenConsumido;
+                registrarSemantica3(clear.linea, 2001, "CLEAR", true, "-", "Sin parametros", null); // entrada: CLEAR no lleva parámetros
                 registrarSalidaFuncion(clear.linea, "clear", "TVoid", "TVoid");
                 if (profundidadExpresion > 0) {
                     String temporal = nuevoTemporal("void");
@@ -1945,6 +1954,19 @@ public class Parser {
         return null;
     }
 
+    // Posición del paréntesis o corchete que cierra al que está en 'abre' (cuenta los anidados); -1 si no lo encuentra
+    private int cierreEn(int abre) {
+        String apertura = tokens.get(abre).lexema;
+        String cierre = apertura.equals("[") ? "]" : ")";
+        int nivel = 0;
+        for (int i = abre; i < tokens.size(); i++) {
+            String lexema = tokens.get(i).lexema;
+            if (lexema.equals(apertura)) nivel++;
+            else if (lexema.equals(cierre) && --nivel == 0) return i;
+        }
+        return -1;
+    }
+
     // Lexemas de los tokens desde 'desde' hasta 'hasta' (ambos incluidos), pegados
     private String textoTokens(int desde, int hasta) {
         StringBuilder sb = new StringBuilder();
@@ -2024,6 +2046,7 @@ public class Parser {
             tipo = salida.tipos.get(0);                                  // salida fija (Exp, Dec, Cadena, Boolean, Void)
         } else if (primerValido && salida.tipos.contains(tipoPrimero)) {
             tipo = tipoPrimero;                                          // salida = tipo de p1
+            if (nombre.equals("pow") && tipo.equals("real")) tipo = "exp"; // pow de un Real da un Exp (por eso $r = POW($r, 2) falla)
         } else {
             tipo = salida.tipos.contains("exp") ? "exp" : "dec";         // p1 inválido: el máximo (Exp) o Dec en inc/dec
         }
