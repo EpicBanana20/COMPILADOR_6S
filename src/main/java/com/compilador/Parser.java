@@ -750,14 +750,14 @@ public class Parser {
                     indice.lexema = indice.texto;
                     if (ctx.indicePropio) {
                         profundidadExpresion--;
-                        indice.tipo = (pilaOperandos.size() == 1) ? pilaOperandos.peek().tipo : "variant";
+                        indice.tipo = (pilaOperandos.size() == 1) ? tipoS2(pilaOperandos.peek()) : "variant";
                         if (pilaOperandos.size() == 1) indice.lexema = pilaOperandos.peek().valor;
                         for (Object[] fila : erroresTiposPendientes) {
                             if (gui != null) gui.getModeloErrores().addRow(fila);
                         }
                         reiniciarExpresion();
                     } else {
-                        indice.tipo = (pilaOperandos.size() > ctx.operandosAlAbrir) ? pilaOperandos.peek().tipo : "variant";
+                        indice.tipo = (pilaOperandos.size() > ctx.operandosAlAbrir) ? tipoS2(pilaOperandos.peek()) : "variant";
                         if (pilaOperandos.size() > ctx.operandosAlAbrir) indice.lexema = pilaOperandos.peek().valor;
                         // El índice no es operando de la expresión que lo contiene: solo queda el arreglo
                         while (pilaOperandos.size() > ctx.operandosAlAbrir) pilaOperandos.pop();
@@ -800,7 +800,7 @@ public class Parser {
                     ArgumentoLlamada argumento = new ArgumentoLlamada();
                     argumento.texto = textoTokensEspaciado(llamada.inicioArgumento, posicionActual - 1);
                     argumento.tipo = "variant";
-                    if (pilaOperandos.size() > llamada.operandosAlAbrir) argumento.tipo = pilaOperandos.peek().tipo;
+                    if (pilaOperandos.size() > llamada.operandosAlAbrir) argumento.tipo = tipoS2(pilaOperandos.peek());
                     // El argumento no es operando de la expresión que contiene la llamada
                     while (pilaOperandos.size() > llamada.operandosAlAbrir) pilaOperandos.pop();
                     llamada.argumentos.add(argumento);
@@ -821,6 +821,14 @@ public class Parser {
                         reiniciarExpresion();
                     }
                     evaluarLlamada(llamada);
+                    // Una llamada a un procedimiento dentro de una expresión vale Void (no devuelve valor)
+                    if (!llamada.propia && llamada.id != null && pilaOperandos.size() == llamada.operandosAlAbrir && !pilaOperandos.isEmpty()) {
+                        Simbolo rutina = buscarSimbolo(llamada.id.lexema);
+                        if (rutina != null && "proc".equals(rutina.getClase())) {
+                            Operando idLlamada = pilaOperandos.pop();
+                            pilaOperandos.push(new Operando(idLlamada.prefijo, idLlamada.valor, "void"));
+                        }
+                    }
                 }
                 continue;
             }
@@ -976,9 +984,10 @@ public class Parser {
                 if (profundidadExpresion == 0) {
                     if (pilaOperandos.size() == 1) {
                         Operando resultado = pilaOperandos.peek();
-                        boolean aceptada = resultado.tipo.equals("bool") || resultado.tipo.equals("variant");
+                        String tipoResultado = tipoS2(resultado);
+                        boolean aceptada = tipoResultado.equals("bool") || tipoResultado.equals("variant");
                         String descripcion = "Condicion " + palabraCondicion + ": se espera Boolean; resultado "
-                            + etiquetaTipo(resultado.tipo) + ".";
+                            + etiquetaTipo(tipoResultado) + ".";
                         registrarSemantica2(lineaApertura, reglaCondicion, descripcion, aceptada, resultado.valor, "Boolean");
                         for (Object[] fila : erroresTiposPendientes) {
                             if (gui != null) gui.getModeloErrores().addRow(fila);
@@ -1009,7 +1018,7 @@ public class Parser {
                 if (profundidadExpresion == 0) {
                     Operando resultado = (pilaOperandos.size() == 1) ? pilaOperandos.peek() : null;
                     if (accion.equals("840")) {
-                        String tipo = (resultado != null) ? resultado.tipo : "variant";
+                        String tipo = (resultado != null) ? tipoS2(resultado) : "variant";
                         boolean valido = tipo.equals("cadena") || tipo.equals("dec") || tipo.equals("variant");
                         if (resultado != null) {
                             registrarSemantica2(lineaApertura, 1060, "Switch: se espera Cadena o entero; expresion " + etiquetaTipo(tipo) + ".",
@@ -1023,9 +1032,10 @@ public class Parser {
                             evaluarCase(resultado);
                         }
                     } else if (resultado != null) { // 846: condición del for
-                        boolean aceptada = resultado.tipo.equals("bool") || resultado.tipo.equals("variant");
+                        String tipoResultado = tipoS2(resultado);
+                        boolean aceptada = tipoResultado.equals("bool") || tipoResultado.equals("variant");
                         registrarSemantica2(lineaApertura, 1081, "For: la comparacion debe ser Boolean; resultado "
-                            + etiquetaTipo(resultado.tipo) + ".", aceptada, resultado.valor, "Boolean");
+                            + etiquetaTipo(tipoResultado) + ".", aceptada, resultado.valor, "Boolean");
                     }
                     if (resultado != null) {
                         for (Object[] fila : erroresTiposPendientes) {
@@ -1625,7 +1635,8 @@ public class Parser {
             // Una variable solo recibe valores de su mismo tipo; variant (p. ej. no declarada) no se valida
             String tipoDestino = operandos[0].tipo;
             String tipoValor = operandos[1].tipo;
-            if (!tipoDestino.equals("variant") && !tipoValor.equals("variant") && !tipoDestino.equals(tipoValor)) {
+            boolean incompatible = !tipoDestino.equals("variant") && !tipoValor.equals("variant") && !cabeEn(tipoDestino, tipoValor);
+            if (incompatible) {
                 int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
                 erroresTiposPendientes.add(new Object[] {
                     "555",
@@ -1633,7 +1644,7 @@ public class Parser {
                     operandos[0].valor + " " + operador + " " + operandos[1].valor, "Semántica 1", String.valueOf(linea) });
             }
             // Si la asignación ya se reportó incompatible (555), no se revisa de nuevo el tipo con la tabla de la operación
-            asignacionIncompatibleReportada = !tipoDestino.equals("variant") && !tipoValor.equals("variant") && !tipoDestino.equals(tipoValor);
+            asignacionIncompatibleReportada = incompatible;
             evaluarAsignacionSemantica2(operador, operandos[0], operandos[1]);
             asignacionIncompatibleReportada = false;
             cuadruplosActuales.add(operador + "," + String.join(",", valores));
@@ -1682,13 +1693,12 @@ public class Parser {
             existeDimension, ctx.id.lexema, "Dim " + tamanos.size());
         if (!existeDimension) { ctx.cortado = true; return; }
 
-        boolean entero = indice.tipo.equals("dec") || indice.tipo.equals("bin") || indice.tipo.equals("oct")
-            || indice.tipo.equals("hex") || indice.tipo.equals("variant");
+        boolean entero = indice.tipo.equals("dec") || indice.tipo.equals("variant"); // solo Dec: Bin, Oct, Hex y null no son índice
         registrarSemantica2(linea, 1040,
             entero ? "Lista de arreglo: el indice " + n + " es entero."
                    : "Lista de arreglo: el indice " + indice.texto + " debe ser entero, es " + etiquetaTipo(indice.tipo) + ".",
             entero, indice.lexema, "Dec");
-        if (!entero) { ctx.cortado = true; return; }
+        if (!entero) return; // este índice no evalúa 1050, pero los siguientes sí se evalúan
 
         Integer tamano = tamanos.get(n - 1);
         boolean fuera = indice.valor != null && tamano != null && (indice.valor < 0 || indice.valor >= tamano);
@@ -1806,7 +1816,7 @@ public class Parser {
 
     // Regla 1070: ++ y -- sobre entero (#D), ! sobre Boolean, ~ sobre un entero (#D, #O, #B, #X). Variant se acepta.
     private void evaluarUnario(String operador, Operando operando) {
-        String tipo = operando.tipo;
+        String tipo = tipoS2(operando);
         boolean aceptada;
         String esperado;
         if (operador.equals("!")) {
@@ -1834,7 +1844,7 @@ public class Parser {
     private void evaluarCase(Operando caso) {
         Object[] contexto = pilaSwitch.peek();
         String tipoBase = (String) contexto[0];
-        String tipo = caso.tipo;
+        String tipo = tipoS2(caso);
         boolean tipoValido = tipo.equals("cadena") || tipo.equals("dec");
         boolean aceptada;
         String detalle;
@@ -1860,6 +1870,7 @@ public class Parser {
     private String[] tipoClaseDeRango(int desde, int hasta) {
         if (desde == hasta && desde >= 0 && desde < tokens.size()) {
             Token t = tokens.get(desde);
+            if (t.token.equals("-107")) return new String[] { "null", "const" };
             if (CODIGO_A_TIPO.containsKey(t.token)) {
                 Simbolo s = buscarSimbolo(t.lexema);
                 if (s == null) return new String[] { "variant", "variant" };
@@ -1876,7 +1887,31 @@ public class Parser {
             if (s == null || s.getTipo() == null || s.getTipo().equals("registro")) return new String[] { "variant", "variant" };
             return new String[] { s.getTipo(), "elemento" };
         }
+        // Llamada a una función predefinida (STRLEN(@c)): su tipo es el de la salida de la función
+        if (desde >= 0 && hasta < tokens.size() && hasta > desde + 1 && tokens.get(desde + 1).lexema.equals("(")
+                && tokens.get(hasta).lexema.equals(")") && cierreEn(desde + 1) == hasta) {
+            LecturaMatriz.ReglaSemantica3 salida = lectorMatriz.getReglaSemantica3(tokens.get(desde).lexema);
+            if (salida != null && salida.esSalida() && salida.tipos.size() == 1) return new String[] { salida.tipos.get(0), "llamada" };
+        }
         return new String[] { "variant", "variant" };
+    }
+
+    // Operando que es el literal null: para las reglas de Semántica 2 y 3 es un tipo propio, no un Variant
+    private boolean esNull(Operando operando) {
+        return operando != null && "null".equals(operando.prefijo);
+    }
+
+    private String tipoS2(Operando operando) {
+        return esNull(operando) ? "null" : operando.tipo;
+    }
+
+    // Asignación de un valor a un destino: del mismo tipo, o un Dec a Real o Exp, o un Real a Exp.
+    // Bin, Oct y Hex no se amplían (un Bin no cabe en un Real).
+    private boolean cabeEn(String destino, String valor) {
+        if (destino.equals(valor)) return true;
+        if (destino.equals("real")) return valor.equals("dec");
+        if (destino.equals("exp")) return valor.equals("dec") || valor.equals("real");
+        return false;
     }
 
     // Regla 1080: la inicialización del for clásico debe asignar a un entero (#D); variant se acepta
@@ -2215,25 +2250,34 @@ public class Parser {
             tipoResultado = tipoValor.equals("variant") ? tipoDestino : tipoValor;
         } else if (operador.equals("=")) {
             tipoResultado = tipoValor;
-            aceptada = tipoDestino.equals(tipoValor);
+            aceptada = cabeEn(tipoDestino, tipoValor);
             if (!aceptada) detalle = "tipos incompatibles entre " + etiquetaTipo(tipoDestino) + " y " + etiquetaTipo(tipoValor);
         } else {
             String clave = operador.equals("+=") ? "SUMA" : operador.equals("-=") ? "RESTA" : operador.equals("*=") ? "MULT" : "DIV";
             int[][] tabla = lectorMatriz.getTablaCompatibilidad(clave);
             int celda = (tabla != null) ? tabla[indiceTipo(tipoDestino)][indiceTipo(tipoValor)] : 0;
+            int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
             if (celda > 0) {
                 aceptada = false;
                 tipoResultado = "variant";
                 detalle = "operacion incompatible entre " + etiquetaTipo(tipoDestino) + " y " + etiquetaTipo(tipoValor);
-                int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
-                // -=, *= y /= incompatibles se reportan como regla 1022 de Semántica 2; += conserva el error de la tabla (Semántica 1)
-                boolean comoSemantica2 = !operador.equals("+=");
+                // Una asignación compuesta incompatible es un error de Semántica 2 (regla 1021 para +=, 1022 para -=, *= y /=)
                 if (!asignacionIncompatibleReportada) erroresTiposPendientes.add(new Object[] {
-                    comoSemantica2 ? String.valueOf(regla) : String.valueOf(celda),
+                    String.valueOf(regla),
                     "Tipos incompatibles para '" + operador + "': " + etiquetaTipo(tipoDestino) + " y " + etiquetaTipo(tipoValor),
-                    lexema, comoSemantica2 ? "Semántica 2" : "Semántica 1", String.valueOf(linea) });
+                    lexema, "Semántica 2", String.valueOf(linea) });
             } else {
                 tipoResultado = tipoDeCodigo(celda);
+                // El resultado de la operación debe caber en el destino (p. ej. #Dx /= 2 da Real y no cabe en Dec)
+                if (tipoResultado != null && !tipoResultado.equals("variant") && !cabeEn(tipoDestino, tipoResultado)) {
+                    aceptada = false;
+                    detalle = "el resultado " + etiquetaTipo(tipoResultado) + " no cabe en " + etiquetaTipo(tipoDestino);
+                    if (!asignacionIncompatibleReportada) erroresTiposPendientes.add(new Object[] {
+                        String.valueOf(regla),
+                        "La asignación compuesta '" + operador + "' no es compatible: el resultado " + etiquetaTipo(tipoResultado)
+                            + " no cabe en " + etiquetaTipo(tipoDestino),
+                        lexema, "Semántica 2", String.valueOf(linea) });
+                }
             }
         }
         String descripcion = prefijoDescripcion + (detalle != null ? detalle + "."
@@ -2270,6 +2314,19 @@ public class Parser {
                 clave = "LOG"; nombre = "lógico"; break;
             default:
                 clave = null; nombre = null; break;
+        }
+
+        // Un procedimiento (Void) no puede ser operando: error con el código de la tabla de la operación
+        if (clave != null && (operandos[0].tipo.equals("void") || operandos[1].tipo.equals("void"))) {
+            int codigo = clave.equals("SUMA") ? 547 : clave.equals("RESTA") ? 548 : clave.equals("MULT") ? 549 : clave.equals("DIV") ? 550
+                : clave.equals("REL") ? 551 : clave.equals("LOG") ? 552 : clave.equals("REL2") ? 553 : 554;
+            int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
+            erroresTiposPendientes.add(new Object[] {
+                String.valueOf(codigo),
+                "Tipos incompatibles para '" + operador + "' (" + nombre + "): "
+                    + etiquetaTipo(operandos[0].tipo) + " y " + etiquetaTipo(operandos[1].tipo),
+                operandos[0].valor + " " + operador + " " + operandos[1].valor, "Semántica 1", String.valueOf(linea) });
+            return "variant";
         }
 
         // Sin tabla (ternario, operador no cubierto o CSV sin cargar): mismo tipo da ese tipo, distinto variant
