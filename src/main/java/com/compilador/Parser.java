@@ -553,8 +553,11 @@ public class Parser {
                     boolean declaraEnFor = enCabeceraFor && posicionActual - 1 == posInicioFor
                         && (siguiente.equals(";") || siguiente.equals(":"))
                         && !existeEnAmbitoOAncestro(ultimoIdConsumido.lexema);
+                    // El primer id de for (#Dj; ...) y for (#Dc : @cad) no se evalúa con 1100, exista o no
+                    boolean primerIdFor = enCabeceraFor && posicionActual - 1 == posInicioFor
+                        && (siguiente.equals(";") || siguiente.equals(":"));
                     // Regla 1100: el id usado debe estar declarado (el que declara el for no cuenta como uso)
-                    if (!asignaEnFor && !declaraEnFor) {
+                    if (!asignaEnFor && !declaraEnFor && !primerIdFor) {
                         registrarSemantica2(ultimoIdConsumido.linea, 1100, "Variable declarada",
                             existeEnAmbitoOAncestro(ultimoIdConsumido.lexema), ultimoIdConsumido.lexema, "id");
                     }
@@ -1767,12 +1770,13 @@ public class Parser {
         // Fuera de una rutina no se evalúa: la regla 1130 solo se registra para returns dentro de una función o procedimiento
         if (funcion == null) return;
         int linea = (lineaApertura > 0) ? lineaApertura : (ultimoTokenConsumido != null ? ultimoTokenConsumido.linea : 0);
-        ambitosConReturn.add(funcion.getTParr());
+        boolean primerReturn = ambitosConReturn.add(funcion.getTParr()); // false si la función ya tenía un return
         if ("proc".equals(funcion.getClase())) { // regla 1140: un procedimiento no retorna valor
             registrarSemantica2(linea, 1140, "Un procedimiento no debe tener return", false, valor.valor, "Void", "return " + textoExpresion);
             return;
         }
-        registrarSemantica2(linea, 1130, "Return dentro de una funcion", true, funcion.getId(), "return");
+        // La regla 1130 (la función tiene return) se registra una sola vez por función, en su primer return
+        if (primerReturn) registrarSemantica2(linea, 1130, "Return dentro de una funcion", true, funcion.getId(), "return");
         boolean tipoIgual = valor.tipo.equals("variant") || valor.tipo.equals(funcion.getTipo());
         registrarSemantica2(linea, 1131,
             "Return: la funcion es " + etiquetaTipo(funcion.getTipo()) + " y retorna " + etiquetaTipo(valor.tipo) + ".",
@@ -1938,9 +1942,13 @@ public class Parser {
                 : "For-in: el valor 1 (" + etiquetaTipo(v1[0]) + ") debe ser del mismo tipo que el arreglo (" + etiquetaTipo(v2[0]) + ").",
                 aceptada, valor2, topeArreglo, lexema);
         } else if (v2[0].equals("cadena")) {
-            boolean aceptada = variant1 || v1[0].equals("dec");
+            // El valor 1 debe ser un identificador (un solo token id), no una constante como 5
+            boolean esId = desde1 == hasta1 && CODIGO_A_TIPO.containsKey(tokens.get(desde1).token);
+            boolean aceptada = variant1 || (v1[0].equals("dec") && esId);
+            String motivo = !esId && v1[0].equals("dec") ? "el valor 1 debe ser un identificador entero (#D), no una constante."
+                : "sobre una cadena el valor 1 debe ser entero (#D), es " + etiquetaTipo(v1[0]) + ".";
             registrarSemantica2(linea, 1083, aceptada ? "For-in: cadena recorrida con un entero."
-                : "For-in: sobre una cadena el valor 1 debe ser entero (#D), es " + etiquetaTipo(v1[0]) + ".", aceptada, valor1, "Dec", lexema);
+                : "For-in: " + motivo, aceptada, valor1, "Dec", lexema);
         } else {
             registrarSemantica2(linea, 1084, "For-in: el valor 2 debe ser un arreglo o una cadena, es " + etiquetaTipo(v2[0]) + ".", false, valor2, topeArreglo, lexema);
         }
@@ -2218,10 +2226,12 @@ public class Parser {
                 tipoResultado = "variant";
                 detalle = "operacion incompatible entre " + etiquetaTipo(tipoDestino) + " y " + etiquetaTipo(tipoValor);
                 int linea = (ultimoTokenConsumido != null) ? ultimoTokenConsumido.linea : 0;
+                // -=, *= y /= incompatibles se reportan como regla 1022 de Semántica 2; += conserva el error de la tabla (Semántica 1)
+                boolean comoSemantica2 = !operador.equals("+=");
                 if (!asignacionIncompatibleReportada) erroresTiposPendientes.add(new Object[] {
-                    String.valueOf(celda),
+                    comoSemantica2 ? String.valueOf(regla) : String.valueOf(celda),
                     "Tipos incompatibles para '" + operador + "': " + etiquetaTipo(tipoDestino) + " y " + etiquetaTipo(tipoValor),
-                    lexema, "Semántica 1", String.valueOf(linea) });
+                    lexema, comoSemantica2 ? "Semántica 2" : "Semántica 1", String.valueOf(linea) });
             } else {
                 tipoResultado = tipoDeCodigo(celda);
             }
