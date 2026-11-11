@@ -420,7 +420,7 @@ public class Parser {
             }
             if (cimaPila.equals("803")) {
                 pila.pop();
-                evaluarProcedimientoSinReturn();
+                evaluarRutinaSinReturn();
                 cerrarAmbito(tokenActual);
                 continue;
             }
@@ -1655,14 +1655,20 @@ public class Parser {
             tipoIgual, valor.valor, etiquetaT(funcion.getTipo()), "return " + textoExpresion);
     }
 
-    // Regla 1140: al cerrar un procedimiento que no tuvo return, se acepta (un procedimiento no regresa valor)
-    private void evaluarProcedimientoSinReturn() {
+    // Al cerrar una rutina sin ningún return:
+    //  - un procedimiento se acepta en 1140 (un procedimiento no regresa valor)
+    //  - una función falla 1130 (debe contener por lo menos un retorno)
+    private void evaluarRutinaSinReturn() {
         if (pilaAmbitos.isEmpty()) return;
         String ambito = String.valueOf(pilaAmbitos.peek());
         Simbolo rutina = rutinaPorAmbito.get(ambito);
-        if (rutina != null && "proc".equals(rutina.getClase()) && !ambitosConReturn.contains(ambito)) {
-            Integer lineaDef = lineaRutinaPorAmbito.get(ambito);
-            registrarSemantica2(lineaDef != null ? lineaDef : 0, 1140, "Procedimiento sin return", true, rutina.getId(), "Void");
+        if (rutina == null || ambitosConReturn.contains(ambito)) return;
+        Integer lineaDef = lineaRutinaPorAmbito.get(ambito);
+        int linea = lineaDef != null ? lineaDef : 0;
+        if ("proc".equals(rutina.getClase())) {
+            registrarSemantica2(linea, 1140, "Procedimiento sin return", true, rutina.getId(), "Void");
+        } else if ("fun".equals(rutina.getClase())) {
+            registrarSemantica2(linea, 1130, "La funcion no tiene ningun return", false, rutina.getId(), "return");
         }
     }
 
@@ -1898,7 +1904,7 @@ public class Parser {
             case 1083: return "En el for each de cadenas el identificador debe ser decimal y recorrer una cadena";
             case 1084: return "En el for each el identificador debe ser del mismo tipo que el arreglo";
             case 1090: return "El identificador debe ser de clase variable, parámetro o arreglo para recibir un valor";
-            case 1130: return "El return debe estar dentro de una función";
+            case 1130: return "La función debe contener por lo menos un retorno";
             case 1131: return "El tipo del retorno debe ser igual al tipo de la función";
             case 1140: return "Un procedimiento no debe tener retorno";
             case 1150: return "La cantidad de parámetros debe ser igual a la declarada";
