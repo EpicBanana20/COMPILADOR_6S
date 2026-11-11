@@ -61,6 +61,8 @@ public class Parser {
     private String palabraCondicion;        // if / elseif / while / do-while
     private Stack<ContextoArreglo> pilaContextosArreglo = new Stack<>(); // accesos id[...] en curso (reglas 1030-1050)
     private Stack<ContextoLlamada> pilaContextosLlamada = new Stack<>(); // llamadas id(...) en curso (reglas 1150-1160)
+    private Stack<ContextoFuncion> pilaContextosFuncion = new Stack<>(); // funciones predefinidas en curso (reglas 2002-2018)
+    private Set<String> temporalesFuncion = new HashSet<>();             // temporales que son resultado de una función predefinida
     private int posInicioReturn;            // primer token de la expresión del return en curso (reglas 1130-1131)
     private Stack<Object[]> pilaSwitch = new Stack<>(); // switch en curso: {tipo base (String o null), lexema de la expresión} (reglas 1060-1061)
     private boolean unarioPropioAbierto;    // un unario fuera de toda expresión abrió su propio contexto (regla 1070)
@@ -248,6 +250,28 @@ public class Parser {
         List<ArgumentoLlamada> argumentos = new ArrayList<>();
     }
 
+    // Un argumento de una función predefinida (Semántica 3): su texto, tipo y forma (id, constante)
+    private static class ArgumentoFuncion {
+        String texto;                         // lo que se muestra: lexema, temporal si es resultado de otra función, o el texto de la expresión
+        String tipo = "variant";
+        String prefijo;
+        String valorCuadruplo;
+        boolean esId;                         // un solo token identificador
+        Long valorConstante;                  // valor si es una única constante decimal
+    }
+
+    // Una llamada a función predefinida SQRT(...), concat(...)... mientras se analiza (acciones 853-855)
+    private static class ContextoFuncion {
+        Token id;
+        int posId;
+        int inicioArgumento;
+        boolean propia;                       // la llamada abrió su propia expresión (sentencia suelta como val(...) o copy(...))
+        int operandosAlAbrir;
+        String tipoSalida;
+        Map<String, Integer> contadoresAlAbrir; // en una sentencia suelta los temporales no se conservan
+        List<ArgumentoFuncion> argumentos = new ArrayList<>();
+    }
+
     // Un acceso id[i1, i2, ...] mientras se analiza
     private static class ContextoArreglo {
         Token id;
@@ -337,6 +361,8 @@ public class Parser {
         this.asignacionPendiente = null;
         this.pilaContextosArreglo = new Stack<>();
         this.pilaContextosLlamada = new Stack<>();
+        this.pilaContextosFuncion = new Stack<>();
+        this.temporalesFuncion = new HashSet<>();
         this.pilaSwitch = new Stack<>();
         this.unarioPropioAbierto = false;
         this.ultimoAccesoArreglo = null;
@@ -792,6 +818,95 @@ public class Parser {
                         reiniciarExpresion();
                     }
                     evaluarLlamada(llamada);
+                }
+                continue;
+            }
+
+            // ==================== SEMÁNTICA 3: FUNCIONES PREDEFINIDAS (853-856) ====================
+            // 853 abre la llamada tras el '(', 854 cierra cada argumento, 855 cierra la llamada y evalúa las reglas 2002-2018.
+            // 856 es CLEAR (sin paréntesis).
+            if (cimaPila.equals("853")) {
+                pila.pop();
+                ContextoFuncion funcion = new ContextoFuncion();
+                funcion.posId = posicionActual - 2;
+                funcion.id = (funcion.posId >= 0 && funcion.posId < tokens.size()) ? tokens.get(funcion.posId) : ultimoTokenConsumido;
+                funcion.inicioArgumento = posicionActual;
+                if (profundidadExpresion == 0) {
+                    funcion.propia = true;
+                    funcion.contadoresAlAbrir = new LinkedHashMap<>(contadoresTemporales);
+                    profundidadExpresion++;
+                }
+                funcion.operandosAlAbrir = pilaOperandos.size();
+                pilaContextosFuncion.push(funcion);
+                continue;
+            }
+            if (cimaPila.equals("854")) {
+                pila.pop();
+                if (!pilaContextosFuncion.isEmpty()) {
+                    ContextoFuncion funcion = pilaContextosFuncion.peek();
+                    int desde = funcion.inicioArgumento;
+                    int hasta = posicionActual - 1;
+                    ArgumentoFuncion argumento = new ArgumentoFuncion();
+                    argumento.texto = textoArgumentoFuncion(desde, hasta);
+                    argumento.prefijo = argumento.texto;
+                    argumento.valorCuadruplo = argumento.texto;
+                    // En una sentencia suelta (copy(...), val(...)) no hay temporales: se muestra el texto del argumento.
+                    // Dentro de una asignación se muestra el operando: el lexema o el temporal de la expresión/función.
+                    boolean sentenciaSuelta = pilaContextosFuncion.firstElement().propia;
+                    if (pilaOperandos.size() > funcion.operandosAlAbrir) {
+                        Operando operando = pilaOperandos.peek();
+                        argumento.tipo = operando.tipo;
+                        argumento.prefijo = operando.prefijo;
+                        argumento.valorCuadruplo = operando.valor;
+                        if (!sentenciaSuelta) argumento.texto = operando.valor;
+                    }
+                    argumento.esId = desde == hasta && desde >= 0 && desde < tokens.size()
+                        && CODIGO_A_TIPO.containsKey(tokens.get(desde).token);
+                    argumento.valorConstante = valorConstanteUnica(desde, hasta);
+                    // El argumento no es operando de la expresión que contiene la llamada
+                    while (pilaOperandos.size() > funcion.operandosAlAbrir) pilaOperandos.pop();
+                    funcion.argumentos.add(argumento);
+                    funcion.inicioArgumento = posicionActual + 1; // salta la coma
+                }
+                continue;
+            }
+            if (cimaPila.equals("855")) {
+                pila.pop();
+                if (!pilaContextosFuncion.isEmpty()) {
+                    ContextoFuncion funcion = pilaContextosFuncion.pop();
+                    evaluarFuncion(funcion);
+                    if (funcion.propia) {
+                        profundidadExpresion--;
+                        for (Object[] fila : erroresTiposPendientes) {
+                            if (gui != null) gui.getModeloErrores().addRow(fila);
+                        }
+                        contadoresTemporales = funcion.contadoresAlAbrir; // la sentencia suelta no deja temporales
+                        reiniciarExpresion();
+                    } else if (funcion.tipoSalida != null) {
+                        // El resultado de la función es un operando (un temporal) de la expresión que la contiene
+                        List<String> prefijos = new ArrayList<>();
+                        List<String> valores = new ArrayList<>();
+                        for (ArgumentoFuncion a : funcion.argumentos) {
+                            prefijos.add(a.prefijo);
+                            valores.add(a.valorCuadruplo);
+                        }
+                        String nombre = funcion.id.lexema;
+                        String temporal = nuevoTemporal(funcion.tipoSalida);
+                        temporalesFuncion.add(temporal);
+                        cuadruplosActuales.add(nombre + "," + String.join(",", valores) + "," + temporal);
+                        pilaOperandos.push(new Operando(nombre + " " + String.join(" ", prefijos), temporal, funcion.tipoSalida));
+                    }
+                }
+                continue;
+            }
+            if (cimaPila.equals("856")) {
+                pila.pop();
+                Token clear = (posicionActual >= 1 && posicionActual <= tokens.size()) ? tokens.get(posicionActual - 1) : ultimoTokenConsumido;
+                registrarSalidaFuncion(clear.linea, "clear", "TVoid", "TVoid");
+                if (profundidadExpresion > 0) {
+                    String temporal = nuevoTemporal("void");
+                    temporalesFuncion.add(temporal);
+                    pilaOperandos.push(new Operando("CLEAR", temporal, "void"));
                 }
                 continue;
             }
@@ -1862,6 +1977,142 @@ public class Parser {
         }
     }
 
+    // ==================== SEMÁNTICA 3: REGLAS 2002-2018 ====================
+
+    // Texto de un argumento tal como se muestra en la evidencia: espacio después de la coma y alrededor de los operadores
+    // binarios (#Dx + 1, concat(@c, @d)); el signo unario y ^ van pegados.
+    private String textoArgumentoFuncion(int desde, int hasta) {
+        StringBuilder sb = new StringBuilder();
+        String anterior = null;
+        for (int i = Math.max(desde, 0); i <= hasta && i < tokens.size(); i++) {
+            String lexema = tokens.get(i).lexema;
+            boolean binario = " + - * / % << >> >>> < > <= >= == != && || & | ".contains(" " + lexema + " ");
+            boolean unario = (lexema.equals("+") || lexema.equals("-"))
+                && (anterior == null || anterior.equals("(") || anterior.equals(",") || "+-*/%<>=!&|".contains(anterior.substring(anterior.length() - 1)));
+            if (binario && !unario) sb.append(' ').append(lexema).append(' ');
+            else sb.append(lexema);
+            if (lexema.equals(",") && i < hasta) sb.append(' ');
+            anterior = lexema;
+        }
+        return sb.toString();
+    }
+
+    // Cierra una llamada a función predefinida: valida cada parámetro (reglas de entrada 2002-2010, una fila por parámetro)
+    // y registra la salida (reglas 2011-2018). Deja el tipo de salida en la llamada.
+    private void evaluarFuncion(ContextoFuncion funcion) {
+        String nombre = funcion.id.lexema.toLowerCase();
+        int linea = funcion.id.linea;
+        boolean primerValido = false;
+        String tipoPrimero = "variant";
+
+        for (int i = 0; i < funcion.argumentos.size(); i++) {
+            ArgumentoFuncion argumento = funcion.argumentos.get(i);
+            String parametro = nombre + "_p" + (i + 1);
+            LecturaMatriz.ReglaSemantica3 regla = lectorMatriz.getReglaSemantica3(parametro);
+            if (regla == null) continue;
+            boolean aceptado = evaluarParametroFuncion(linea, parametro, regla, argumento);
+            if (i == 0) {
+                primerValido = aceptado;
+                tipoPrimero = argumento.tipo;
+            }
+        }
+
+        LecturaMatriz.ReglaSemantica3 salida = lectorMatriz.getReglaSemantica3(nombre);
+        if (salida == null || salida.tipos.isEmpty()) return;
+        String tipo;
+        if (salida.tipos.size() == 1) {
+            tipo = salida.tipos.get(0);                                  // salida fija (Exp, Dec, Cadena, Boolean, Void)
+        } else if (primerValido && salida.tipos.contains(tipoPrimero)) {
+            tipo = tipoPrimero;                                          // salida = tipo de p1
+        } else {
+            tipo = salida.tipos.contains("exp") ? "exp" : "dec";         // p1 inválido: el máximo (Exp) o Dec en inc/dec
+        }
+        funcion.tipoSalida = tipo;
+        registrarSalidaFuncion(linea, nombre, topeTipos(salida.tipos, false), "T" + etiquetaTipo(tipo), salida.regla);
+    }
+
+    private void registrarSalidaFuncion(int linea, String nombre, String tope, String valor) {
+        LecturaMatriz.ReglaSemantica3 salida = lectorMatriz.getReglaSemantica3(nombre);
+        registrarSalidaFuncion(linea, nombre, tope, valor, salida != null ? salida.regla : 2011);
+    }
+
+    private void registrarSalidaFuncion(int linea, String nombre, String tope, String valor, int regla) {
+        // CLEAR se escribe en mayúsculas en la evidencia; las demás salidas llevan el nombre de la función
+        registrarSemantica3(linea, regla, nombre.equals("clear") ? "CLEAR" : nombre, true, valor, tope, null);
+    }
+
+    // Texto de "Tope Pila": TDec/TReal/TExp (con /id si la regla acepta identificadores)
+    private String topeTipos(List<String> tipos, boolean conId) {
+        StringBuilder sb = new StringBuilder();
+        for (String t : tipos) {
+            if (sb.length() > 0) sb.append('/');
+            sb.append('T').append(etiquetaTipo(t));
+        }
+        if (conId) sb.append("/id");
+        return sb.toString();
+    }
+
+    private String listaEtiquetas(List<String> tipos) {
+        StringBuilder sb = new StringBuilder();
+        for (String t : tipos) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(etiquetaTipo(t));
+        }
+        return sb.toString();
+    }
+
+    // Valida un argumento contra la regla de su parámetro; registra la fila y, si falla, el error de Semántica 3
+    private boolean evaluarParametroFuncion(int linea, String parametro, LecturaMatriz.ReglaSemantica3 regla, ArgumentoFuncion argumento) {
+        String tipo = argumento.tipo;
+        String etiqueta = etiquetaTipo(tipo);
+        boolean variant = tipo.equals("variant"); // tipo desconocido (id no declarado): no se valida
+        boolean aceptado;
+        String tope;
+        String mensaje;
+
+        if (regla.idCadena) {                                            // 2006: solo un id de Cadena
+            aceptado = variant || (argumento.esId && tipo.equals("cadena"));
+            tope = "id TCadena";
+            mensaje = argumento.esId ? "requiere un id Cadena; recibido " + etiqueta + "."
+                : "requiere un identificador; recibido un valor de tipo " + etiqueta + ".";
+        } else if (!regla.soloId.isEmpty()) {                            // 2007: solo un id de Bin, Dec, Oct o Hex
+            aceptado = variant || (argumento.esId && regla.soloId.contains(tipo));
+            tope = "id " + topeTipos(regla.soloId, false);
+            mensaje = argumento.esId ? "requiere un id " + listaEtiquetas(regla.soloId) + "; recibido " + etiqueta + "."
+                : "requiere un identificador; recibido un valor de tipo " + etiqueta + ".";
+        } else if (parametro.equals("val_p3")) {                         // 2004: Dec con valor 2, 8, 10 o 16, o un id Dec
+            aceptado = variant || regla.tipos.contains(tipo);
+            mensaje = "requiere Dec con valor 2, 8, 10, 16; recibido " + etiqueta + ".";
+            Long valor = argumento.valorConstante;
+            if (aceptado && valor != null && valor != 2 && valor != 8 && valor != 10 && valor != 16) {
+                aceptado = false;
+                mensaje = "requiere Dec con valor 2, 8, 10, 16; recibido el valor " + valor + ".";
+            }
+            tope = "TDec(2,8,10,16)/id";
+        } else {
+            aceptado = variant || regla.tipos.contains(tipo);
+            tope = topeTipos(regla.tipos, regla.id);
+            mensaje = "requiere " + listaEtiquetas(regla.tipos) + "; recibido " + etiqueta + ".";
+        }
+
+        registrarSemantica3(linea, regla.regla, parametro, aceptado, argumento.texto, tope, mensaje);
+        return aceptado;
+    }
+
+    // Registra una fila de Semántica 3 (misma lista que Semántica 2, con la función al final). Si falla, va a la tabla de Errores.
+    private void registrarSemantica3(int linea, int regla, String funcion, boolean aceptada, String valorReal, String tope, String mensajeError) {
+        int ambito = pilaAmbitos.isEmpty() ? 0 : pilaAmbitos.peek();
+        registroSemantica2.add(new Object[] { linea, regla, funcion, aceptada ? "ACEPT" : "ERROR", valorReal, ambito, tope, funcion });
+        if (!aceptada && gui != null) {
+            gui.getModeloErrores().addRow(new Object[] {
+                String.valueOf(regla), "ERROR: " + funcion + ": " + mensajeError, funcion + ": " + valorReal, "Semántica 3", String.valueOf(linea) });
+        }
+    }
+
+    public Map<String, LecturaMatriz.ReglaSemantica3> getReglasSemantica3() {
+        return lectorMatriz.getReglasSemantica3();
+    }
+
     public List<Object[]> getRegistroSemantica2() {
         return registroSemantica2;
     }
@@ -2050,6 +2301,7 @@ public class Parser {
             case "exp": return "Texp";
             case "cadena": return "TCadena";
             case "bool": return "TBoolean";
+            case "void": return "TVoid";
             default: return "TVariant";
         }
     }

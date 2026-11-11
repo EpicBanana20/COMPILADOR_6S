@@ -122,6 +122,10 @@ public class CrearXLS {
             Sheet sheetSem2Total = workbook.createSheet("Semantica 2-Total");
             escribirSemantica2Total(sheetSem2Total, registroSemantica2, estiloEncabezado, estiloCentrado);
 
+            // --- 9. Hoja de Semantica 3 (entradas y salidas de las funciones predefinidas) ---
+            Sheet sheetSem3 = workbook.createSheet("Semantica 3");
+            escribirSemantica3(sheetSem3, registroSemantica2, estiloEncabezado, estiloCentrado);
+
             // Guardamos el archivo físicamente
             try (FileOutputStream fileOut = new FileOutputStream(rutaAbsoluta)) {
                 workbook.write(fileOut);
@@ -489,7 +493,7 @@ public class CrearXLS {
 
     // Hoja "Semantica 2-Base": una fila por regla evaluada. Registro: {linea, regla, descripcion, ACEPT/ERROR, lexema, ambito, tope de pila}
     private void escribirSemantica2Base(Sheet sheet, List<Object[]> registro, CellStyle estiloEncabezado, CellStyle estilo) {
-        String[] headers = {"Regla", "Tope Pila", "Valor Real", "Linea", "Edo", "Ambito"};
+        String[] headers = {"Regla", "Función", "Tope Pila", "Valor Real", "Linea", "Edo", "Ambito"};
         Row headerRow = sheet.createRow(0);
         for (int i = 0; i < headers.length; i++) {
             Cell cell = headerRow.createCell(i);
@@ -497,11 +501,12 @@ public class CrearXLS {
             cell.setCellStyle(estiloEncabezado);
         }
         sheet.setColumnWidth(0, 8 * 256);
-        sheet.setColumnWidth(1, 11 * 256);
+        sheet.setColumnWidth(1, 12 * 256);
         sheet.setColumnWidth(2, 40 * 256);
-        sheet.setColumnWidth(3, 8 * 256);
-        sheet.setColumnWidth(4, 9 * 256);
+        sheet.setColumnWidth(3, 30 * 256);
+        sheet.setColumnWidth(4, 8 * 256);
         sheet.setColumnWidth(5, 9 * 256);
+        sheet.setColumnWidth(6, 9 * 256);
 
         int filaExcel = 1;
         for (Object[] fila : registro) {
@@ -509,21 +514,74 @@ public class CrearXLS {
             Cell cRegla = row.createCell(0);
             cRegla.setCellValue((Integer) fila[1]);
             cRegla.setCellStyle(estilo);
-            Cell cTope = row.createCell(1);
+            Cell cFuncion = row.createCell(1);
+            cFuncion.setCellValue(fila.length > 7 ? String.valueOf(fila[7]) : "-"); // solo las reglas de Semántica 3 traen función
+            cFuncion.setCellStyle(estilo);
+            Cell cTope = row.createCell(2);
             cTope.setCellValue(String.valueOf(fila[6]));
             cTope.setCellStyle(estilo);
-            Cell cValor = row.createCell(2);
+            Cell cValor = row.createCell(3);
             cValor.setCellValue(String.valueOf(fila[4]));
             cValor.setCellStyle(estilo);
-            Cell cLinea = row.createCell(3);
+            Cell cLinea = row.createCell(4);
             cLinea.setCellValue((Integer) fila[0]);
             cLinea.setCellStyle(estilo);
-            Cell cEdo = row.createCell(4);
+            Cell cEdo = row.createCell(5);
             cEdo.setCellValue("ACEPT".equals(fila[3]) ? "Acept" : "ERROR");
             cEdo.setCellStyle(estilo);
-            Cell cAmbito = row.createCell(5);
+            Cell cAmbito = row.createCell(6);
             cAmbito.setCellValue((Integer) fila[5]);
             cAmbito.setCellStyle(estilo);
+        }
+    }
+
+    // Hoja "Semantica 3": por función (o parámetro), cuántas veces apareció como entrada o salida, cuántas se aceptaron y cuántas fueron error
+    private void escribirSemantica3(Sheet sheet, List<Object[]> registro, CellStyle estiloEncabezado, CellStyle estilo) {
+        String[] headers = {"Función", "Entradas", "Salida", "Aceptados", "Errores"};
+        Row headerRow = sheet.createRow(0);
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(estiloEncabezado);
+        }
+        sheet.setColumnWidth(0, 14 * 256);
+
+        Map<String, LecturaMatriz.ReglaSemantica3> reglas = parser != null ? parser.getReglasSemantica3() : new LinkedHashMap<>();
+        java.util.TreeMap<String, LecturaMatriz.ReglaSemantica3> ordenadas = new java.util.TreeMap<>((x, y) -> {
+            if (x.equals("CLEAR") != y.equals("CLEAR")) return x.equals("CLEAR") ? -1 : 1; // CLEAR primero, como en la evidencia
+            return String.CASE_INSENSITIVE_ORDER.compare(x, y);
+        });
+        for (LecturaMatriz.ReglaSemantica3 r : reglas.values()) {
+            ordenadas.put(r.nombre, r);
+        }
+
+        int filaExcel = 1;
+        for (Map.Entry<String, LecturaMatriz.ReglaSemantica3> entrada : ordenadas.entrySet()) {
+            int aceptados = 0;
+            int errores = 0;
+            for (Object[] fila : registro) {
+                if (fila.length < 8 || !entrada.getKey().equals(fila[7])) continue;
+                if ("ACEPT".equals(fila[3])) aceptados++; else errores++;
+            }
+            Row row = sheet.createRow(filaExcel++);
+            Cell cNombre = row.createCell(0);
+            cNombre.setCellValue(entrada.getKey());
+            cNombre.setCellStyle(estilo);
+            Cell cEntradas = row.createCell(1);
+            Cell cSalida = row.createCell(2);
+            if (entrada.getValue().esSalida()) {
+                cSalida.setCellValue(aceptados + errores);
+            } else {
+                cEntradas.setCellValue(aceptados + errores);
+            }
+            cEntradas.setCellStyle(estilo);
+            cSalida.setCellStyle(estilo);
+            Cell cAceptados = row.createCell(3);
+            cAceptados.setCellValue(aceptados);
+            cAceptados.setCellStyle(estilo);
+            Cell cErrores = row.createCell(4);
+            cErrores.setCellValue(errores);
+            cErrores.setCellStyle(estilo);
         }
     }
 

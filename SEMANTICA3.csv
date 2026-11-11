@@ -1,0 +1,19 @@
+Regla,Bin,Dec,Oct,Hex,Real,Exp,Cadena,Boolean,Void,IdCadena,Id,Funciones
+2001,,,,,,,,,,,,CLEAR
+2002,,*,,,*,*,,,,,*,sqrt_p1 sqrtv_p1 sin_p1 cos_p1 tan_p1 sqr_p1
+2003,*,*,*,*,*,*,,,,,*,pow_p1
+2004,,*,,,,,,,,,*,pow_p2 sqrtv_p2 val_p3
+2005,,,,,,,*,,,,*,strlen_p1 concat_p1 concat_p2 copy_p2
+2006,,,,,,,,,,*,,copy_p1 str_p2
+2007,solo id,solo id,solo id,solo id,,,,,,,,val_p1 val_p2
+2008,*,*,*,*,*,*,,*,,,*,str_p1
+2009,*,*,*,*,,,,,,,*,chr_p1 inc_p1 dec_p1
+2010,,,,,*,*,,,,,*,pred_p1 succ_p1
+2011,,,,,,,,,*,,,CLEAR copy val
+2012,,,,,,*,,,,,,sqrt sqrtv sin cos tan sqr
+2013,*,*,*,*,*,*,,,,,,pow
+2014,,*,,,,,,,,,,strlen
+2015,,,,,,,*,,,,,concat chr
+2016,,,,,,,,*,,,,str
+2017,,,,,*,*,,,,,,pred succ
+2018,*,*,*,*,,,,,,,,inc dec

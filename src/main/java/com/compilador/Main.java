@@ -28,6 +28,9 @@ public class Main {
 
             // CARGAR TABLAS DE COMPATIBILIDAD DE TIPOS
             lectorMatriz.cargarCompatibilidad("COMPATIBILIDAD.csv");
+
+            // CARGAR REGLAS DE SEMÁNTICA 3 (entradas y salidas de las funciones)
+            lectorMatriz.cargarSemantica3("SEMANTICA3.csv");
             
             // Imprimir para verificar
             System.out.println("\n=== VERIFICACIÓN DE CARGA ===");

@@ -1,0 +1,350 @@
+// =====================================================================
+// PRUEBA SEMANTICA 3 - COMPLETA (reglas de funciones 2002 a 2018)
+// =====================================================================
+// Objetivo: probar TODAS las funciones, TODOS sus parametros y TODAS las
+// reglas de entrada (2002-2010) y de salida (2011-2018), con casos
+// correctos y con casos incorrectos.
+//
+// Solo debe haber errores de Semantica 3 (tipo "Semantica3"). No debe
+// aparecer ningun error lexico, sintactico, de ambito, de Semantica 1 ni
+// de Semantica 2. Por eso cada resultado de una funcion se asigna a una
+// variable de su mismo tipo, aun en las lineas que tienen error de
+// parametro.
+//
+// Cada linea trae al final lo que se espera:
+//   // OK                       -> todas sus reglas de Semantica 3 se aceptan
+//   // ERROR <regla> <funcion>  -> esa regla se rechaza (puede haber varias)
+// Las reglas de salida (2011-2018) siempre se aceptan.
+//
+// Literales de este lenguaje (se usan abajo):
+//   Dec: 16        Real: 2.5        Exp: 2^3        Cadena: "hola"
+//   Bin: xb101     Oct: xo17        Hex: xl1F       Boolean: true
+//
+// Reglas de ENTRADA                                  Funcion_parametro
+//   2002  Dec, Real, Exp, id                         sqrt_p1 sqrtv_p1 sin_p1 cos_p1 tan_p1 sqr_p1
+//   2003  Bin, Dec, Oct, Hex, Real, Exp, id          pow_p1
+//   2004  Dec, id  (val_p3: solo 2, 8, 10 o 16)      pow_p2 sqrtv_p2 val_p3
+//   2005  Cadena, id                                 strlen_p1 concat_p1 concat_p2 copy_p2
+//   2006  solo id de Cadena                          copy_p1 str_p2
+//   2007  solo id de Bin, Dec, Oct o Hex             val_p1 val_p2
+//   2008  Bin, Dec, Oct, Hex, Real, Exp, Boolean, id str_p1
+//   2009  Bin, Dec, Oct, Hex, id                     chr_p1 inc_p1 dec_p1
+//   2010  Real, Exp, id                              pred_p1 succ_p1
+// Reglas de SALIDA
+//   2011  Void: CLEAR, copy, val        2012  Exp: sqrt sqrtv sin cos tan sqr
+//   2013  pow (tipo de p1)              2014  Dec: strlen
+//   2015  Cadena: concat, chr           2016  Boolean: str
+//   2017  pred, succ (tipo de p1)       2018  inc, dec (tipo de p1)
+// Si p1 es invalido en pow/pred/succ la salida es el maximo (Exp); en
+// inc/dec es Dec. La salida se acepta de todos modos.
+// =====================================================================
+var #Bb, #Oo, #Dx, #Dy, #Xh, $r, ¿e, @c, @d, ¡f;
+main() {
+// ----------------------------------------------------------------
+// 1. CLEAR (salida 2011, sin entradas)
+// ----------------------------------------------------------------
+CLEAR; // OK
+// ----------------------------------------------------------------
+// 2. Regla 2002: sqrt, sqrtv, sin, cos, tan, sqr (p1: Dec, Real, Exp, id)
+// ----------------------------------------------------------------
+// 2.1 sqrt_p1: todos los tipos
+¿e = SQRT(16); // OK
+¿e = SQRT(2.5); // OK
+¿e = SQRT(2^3); // OK
+¿e = SQRT(#Dx); // OK
+¿e = SQRT($r); // OK
+¿e = SQRT(¿e); // OK
+¿e = SQRT(#Dx + 2); // OK
+¿e = SQRT(#Dx * 2.5); // OK
+¿e = SQRT(xb101); // ERROR 2002 sqrt_p1
+¿e = SQRT(xo17); // ERROR 2002 sqrt_p1
+¿e = SQRT(xl1F); // ERROR 2002 sqrt_p1
+¿e = SQRT(#Bb); // ERROR 2002 sqrt_p1
+¿e = SQRT(#Oo); // ERROR 2002 sqrt_p1
+¿e = SQRT(#Xh); // ERROR 2002 sqrt_p1
+¿e = SQRT("hola"); // ERROR 2002 sqrt_p1
+¿e = SQRT(@c); // ERROR 2002 sqrt_p1
+¿e = SQRT(true); // ERROR 2002 sqrt_p1
+¿e = SQRT(¡f); // ERROR 2002 sqrt_p1
+// 2.2 sqrtv_p1 (p2 correcto)
+¿e = SQRTV(16, 2); // OK
+¿e = SQRTV(2.5, 2); // OK
+¿e = SQRTV(2^3, 2); // OK
+¿e = SQRTV($r, 2); // OK
+¿e = SQRTV(xb101, 2); // ERROR 2002 sqrtv_p1
+¿e = SQRTV(#Xh, 2); // ERROR 2002 sqrtv_p1
+¿e = SQRTV(@c, 2); // ERROR 2002 sqrtv_p1
+¿e = SQRTV(true, 2); // ERROR 2002 sqrtv_p1
+// 2.3 sin_p1
+¿e = sin(16); // OK
+¿e = sin($r); // OK
+¿e = sin(¿e); // OK
+¿e = sin(#Bb); // ERROR 2002 sin_p1
+¿e = sin("hola"); // ERROR 2002 sin_p1
+¿e = sin(¡f); // ERROR 2002 sin_p1
+// 2.4 cos_p1
+¿e = cos(16); // OK
+¿e = cos(2.5); // OK
+¿e = cos(¿e); // OK
+¿e = cos(#Oo); // ERROR 2002 cos_p1
+¿e = cos(@c); // ERROR 2002 cos_p1
+¿e = cos(true); // ERROR 2002 cos_p1
+// 2.5 tan_p1
+¿e = tan(#Dx); // OK
+¿e = tan(2.5); // OK
+¿e = tan(2^3); // OK
+¿e = tan(xl1F); // ERROR 2002 tan_p1
+¿e = tan(@d); // ERROR 2002 tan_p1
+¿e = tan(¡f); // ERROR 2002 tan_p1
+// 2.6 sqr_p1
+¿e = sqr(#Dx); // OK
+¿e = sqr($r); // OK
+¿e = sqr(2^3); // OK
+¿e = sqr(xb101); // ERROR 2002 sqr_p1
+¿e = sqr("hola"); // ERROR 2002 sqr_p1
+¿e = sqr(true); // ERROR 2002 sqr_p1
+// ----------------------------------------------------------------
+// 3. Regla 2003: pow_p1 (todos los numericos; la salida 2013 es el tipo de p1)
+// ----------------------------------------------------------------
+#Bb = POW(#Bb, 2); // OK
+#Bb = POW(xb101, 2); // OK
+#Oo = POW(#Oo, 2); // OK
+#Oo = POW(xo17, 2); // OK
+#Dx = POW(#Dx, 2); // OK
+#Dx = POW(9, 2); // OK
+#Xh = POW(#Xh, 2); // OK
+#Xh = POW(xl1F, 2); // OK
+$r = POW($r, 2); // OK
+$r = POW(2.5, 2); // OK
+¿e = POW(¿e, 2); // OK
+¿e = POW(2^3, 2); // OK
+¿e = POW(@c, 2); // ERROR 2003 pow_p1
+¿e = POW("hola", 2); // ERROR 2003 pow_p1
+¿e = POW(true, 2); // ERROR 2003 pow_p1
+¿e = POW(¡f, 2); // ERROR 2003 pow_p1
+// ----------------------------------------------------------------
+// 4. Regla 2004: pow_p2, sqrtv_p2, val_p3 (Dec o id de Dec)
+// ----------------------------------------------------------------
+// 4.1 pow_p2
+#Dx = POW(#Dx, #Dy); // OK
+#Dx = POW(#Dx, 2.5); // ERROR 2004 pow_p2
+#Dx = POW(#Dx, 2^3); // ERROR 2004 pow_p2
+#Dx = POW(#Dx, "a"); // ERROR 2004 pow_p2
+#Dx = POW(#Dx, #Bb); // ERROR 2004 pow_p2
+#Dx = POW(#Dx, $r); // ERROR 2004 pow_p2
+#Dx = POW(#Dx, ¿e); // ERROR 2004 pow_p2
+#Dx = POW(#Dx, xl1F); // ERROR 2004 pow_p2
+#Dx = POW(#Dx, true); // ERROR 2004 pow_p2
+¿e = POW(@c, 2.5); // ERROR 2003 pow_p1, 2004 pow_p2
+// 4.2 sqrtv_p2
+¿e = SQRTV(16, #Dy); // OK
+¿e = SQRTV(16, 2.5); // ERROR 2004 sqrtv_p2
+¿e = SQRTV(16, 2^3); // ERROR 2004 sqrtv_p2
+¿e = SQRTV(16, @c); // ERROR 2004 sqrtv_p2
+¿e = SQRTV(16, #Bb); // ERROR 2004 sqrtv_p2
+¿e = SQRTV(16, true); // ERROR 2004 sqrtv_p2
+¿e = SQRTV("a", 2.5); // ERROR 2002 sqrtv_p1, 2004 sqrtv_p2
+// 4.3 val_p3: solo los valores 2, 8, 10 y 16, o un id de Dec
+val(#Bb, #Oo, 2); // OK
+val(#Bb, #Oo, 8); // OK
+val(#Bb, #Oo, 10); // OK
+val(#Bb, #Oo, 16); // OK
+val(#Bb, #Oo, #Dy); // OK
+val(#Bb, #Oo, 0); // ERROR 2004 val_p3
+val(#Bb, #Oo, 5); // ERROR 2004 val_p3
+val(#Bb, #Oo, 32); // ERROR 2004 val_p3
+val(#Bb, #Oo, 2.5); // ERROR 2004 val_p3
+val(#Bb, #Oo, 2^3); // ERROR 2004 val_p3
+val(#Bb, #Oo, "8"); // ERROR 2004 val_p3
+val(#Bb, #Oo, #Xh); // ERROR 2004 val_p3
+val(#Bb, #Oo, xl10); // ERROR 2004 val_p3
+val(#Bb, #Oo, true); // ERROR 2004 val_p3
+// ----------------------------------------------------------------
+// 5. Regla 2005: strlen_p1, concat_p1, concat_p2, copy_p2 (Cadena o id)
+// ----------------------------------------------------------------
+// 5.1 strlen_p1
+#Dx = STRLEN("hola"); // OK
+#Dx = STRLEN(@c); // OK
+#Dx = STRLEN(5); // ERROR 2005 strlen_p1
+#Dx = STRLEN(2.5); // ERROR 2005 strlen_p1
+#Dx = STRLEN(2^3); // ERROR 2005 strlen_p1
+#Dx = STRLEN(true); // ERROR 2005 strlen_p1
+#Dx = STRLEN(#Dx); // ERROR 2005 strlen_p1
+#Dx = STRLEN($r); // ERROR 2005 strlen_p1
+#Dx = STRLEN(#Bb); // ERROR 2005 strlen_p1
+#Dx = STRLEN(¡f); // ERROR 2005 strlen_p1
+// 5.2 concat_p1 y concat_p2
+@c = concat("hola", "mundo"); // OK
+@c = concat(@c, @d); // OK
+@c = concat("hola", @d); // OK
+@c = concat(@c, "mundo"); // OK
+@c = concat(5, @d); // ERROR 2005 concat_p1
+@c = concat(@c, 5); // ERROR 2005 concat_p2
+@c = concat(5, 5); // ERROR 2005 concat_p1, 2005 concat_p2
+@c = concat(#Dx, ¡f); // ERROR 2005 concat_p1, 2005 concat_p2
+@c = concat($r, ¿e); // ERROR 2005 concat_p1, 2005 concat_p2
+@c = concat(true, "a"); // ERROR 2005 concat_p1
+// 5.3 copy_p2 (p1 correcto)
+copy(@c, "x"); // OK
+copy(@c, @d); // OK
+copy(@c, concat(@c, @d)); // OK
+copy(@c, 5); // ERROR 2005 copy_p2
+copy(@c, #Dx); // ERROR 2005 copy_p2
+copy(@c, 2.5); // ERROR 2005 copy_p2
+copy(@c, true); // ERROR 2005 copy_p2
+// ----------------------------------------------------------------
+// 6. Regla 2006: copy_p1 y str_p2 (solo id de Cadena)
+// ----------------------------------------------------------------
+// 6.1 copy_p1 (p2 correcto)
+copy("x", @d); // ERROR 2006 copy_p1
+copy(5, @d); // ERROR 2006 copy_p1
+copy(#Dx, @d); // ERROR 2006 copy_p1
+copy(true, @d); // ERROR 2006 copy_p1
+copy(concat(@c, @d), @d); // ERROR 2006 copy_p1
+copy("x", 5); // ERROR 2006 copy_p1, 2005 copy_p2
+// 6.2 str_p2 (p1 correcto)
+¡f = str(5, @c); // OK
+¡f = str(5, "x"); // ERROR 2006 str_p2
+¡f = str(5, #Dx); // ERROR 2006 str_p2
+¡f = str(5, true); // ERROR 2006 str_p2
+¡f = str(5, concat(@c, @d)); // ERROR 2006 str_p2
+// ----------------------------------------------------------------
+// 7. Regla 2007: val_p1 y val_p2 (solo id de Bin, Dec, Oct o Hex)
+// ----------------------------------------------------------------
+val(#Bb, #Oo, 2); // OK
+val(#Dx, #Xh, 8); // OK
+val(#Xh, #Bb, 16); // OK
+val(#Oo, #Dx, 10); // OK
+val(5, #Oo, 2); // ERROR 2007 val_p1
+val(xb101, #Oo, 2); // ERROR 2007 val_p1
+val(#Dx + 1, #Oo, 2); // ERROR 2007 val_p1
+val(@c, #Oo, 2); // ERROR 2007 val_p1
+val($r, #Oo, 2); // ERROR 2007 val_p1
+val(#Bb, 7, 2); // ERROR 2007 val_p2
+val(#Bb, xo17, 2); // ERROR 2007 val_p2
+val(#Bb, $r, 2); // ERROR 2007 val_p2
+val(#Bb, ¿e, 2); // ERROR 2007 val_p2
+val(#Bb, ¡f, 2); // ERROR 2007 val_p2
+val(¡f, @c, 2); // ERROR 2007 val_p1, 2007 val_p2
+val(5, 7, 2); // ERROR 2007 val_p1, 2007 val_p2
+val(5, 7, 3); // ERROR 2007 val_p1, 2007 val_p2, 2004 val_p3
+// ----------------------------------------------------------------
+// 8. Regla 2008: str_p1 (numericos, Boolean o id; NO acepta cadenas)
+// ----------------------------------------------------------------
+¡f = str(true, @c); // OK
+¡f = str(5, @c); // OK
+¡f = str(2.5, @c); // OK
+¡f = str(2^3, @c); // OK
+¡f = str(xb101, @c); // OK
+¡f = str(xo17, @c); // OK
+¡f = str(xl1F, @c); // OK
+¡f = str(#Bb, @c); // OK
+¡f = str(#Oo, @c); // OK
+¡f = str(#Dx, @c); // OK
+¡f = str(#Xh, @c); // OK
+¡f = str($r, @c); // OK
+¡f = str(¿e, @c); // OK
+¡f = str(¡f, @c); // OK
+¡f = str(#Dx + 2, @c); // OK
+¡f = str("hola", @c); // ERROR 2008 str_p1
+¡f = str(@d, @c); // ERROR 2008 str_p1
+¡f = str(concat(@c, @d), @c); // ERROR 2008 str_p1
+¡f = str("a", 5); // ERROR 2008 str_p1, 2006 str_p2
+// ----------------------------------------------------------------
+// 9. Regla 2009: chr_p1, inc_p1, dec_p1 (Bin, Dec, Oct, Hex o id)
+// ----------------------------------------------------------------
+// 9.1 chr_p1 (salida Cadena)
+@c = chr(65); // OK
+@c = chr(xb101); // OK
+@c = chr(xo17); // OK
+@c = chr(xl1F); // OK
+@c = chr(#Bb); // OK
+@c = chr(#Oo); // OK
+@c = chr(#Dx); // OK
+@c = chr(#Xh); // OK
+@c = chr(2.5); // ERROR 2009 chr_p1
+@c = chr($r); // ERROR 2009 chr_p1
+@c = chr(¿e); // ERROR 2009 chr_p1
+@c = chr(2^3); // ERROR 2009 chr_p1
+@c = chr("a"); // ERROR 2009 chr_p1
+@c = chr(@d); // ERROR 2009 chr_p1
+@c = chr(true); // ERROR 2009 chr_p1
+@c = chr(¡f); // ERROR 2009 chr_p1
+// 9.2 inc_p1 (salida: tipo de p1; si p1 es invalido, Dec)
+#Bb = inc(#Bb); // OK
+#Oo = inc(#Oo); // OK
+#Dx = inc(#Dx); // OK
+#Xh = inc(#Xh); // OK
+#Bb = inc(xb101); // OK
+#Dx = inc(5); // OK
+#Dx = inc(2.5); // ERROR 2009 inc_p1
+#Dx = inc($r); // ERROR 2009 inc_p1
+#Dx = inc(¿e); // ERROR 2009 inc_p1
+#Dx = inc(2^3); // ERROR 2009 inc_p1
+#Dx = inc("a"); // ERROR 2009 inc_p1
+#Dx = inc(@c); // ERROR 2009 inc_p1
+#Dx = inc(true); // ERROR 2009 inc_p1
+#Dx = inc(¡f); // ERROR 2009 inc_p1
+// 9.3 dec_p1 (igual que inc)
+#Bb = dec(#Bb); // OK
+#Oo = dec(#Oo); // OK
+#Dx = dec(#Dx); // OK
+#Xh = dec(#Xh); // OK
+#Xh = dec(xl1F); // OK
+#Dx = dec(5); // OK
+#Dx = dec(2.5); // ERROR 2009 dec_p1
+#Dx = dec($r); // ERROR 2009 dec_p1
+#Dx = dec(¿e); // ERROR 2009 dec_p1
+#Dx = dec("a"); // ERROR 2009 dec_p1
+#Dx = dec(@c); // ERROR 2009 dec_p1
+#Dx = dec(true); // ERROR 2009 dec_p1
+// ----------------------------------------------------------------
+// 10. Regla 2010: pred_p1 y succ_p1 (Real, Exp o id; salida: tipo de p1,
+//     y si p1 es invalido, Exp)
+// ----------------------------------------------------------------
+$r = pred($r); // OK
+$r = pred(2.5); // OK
+¿e = pred(¿e); // OK
+¿e = pred(2^3); // OK
+¿e = pred(#Dx); // ERROR 2010 pred_p1
+¿e = pred(5); // ERROR 2010 pred_p1
+¿e = pred(#Bb); // ERROR 2010 pred_p1
+¿e = pred(xl1F); // ERROR 2010 pred_p1
+¿e = pred(@c); // ERROR 2010 pred_p1
+¿e = pred("a"); // ERROR 2010 pred_p1
+¿e = pred(true); // ERROR 2010 pred_p1
+¿e = pred(¡f); // ERROR 2010 pred_p1
+$r = succ($r); // OK
+$r = succ(2.5); // OK
+¿e = succ(¿e); // OK
+¿e = succ(2^3); // OK
+¿e = succ(#Dx); // ERROR 2010 succ_p1
+¿e = succ(5); // ERROR 2010 succ_p1
+¿e = succ(#Oo); // ERROR 2010 succ_p1
+¿e = succ(@c); // ERROR 2010 succ_p1
+¿e = succ("a"); // ERROR 2010 succ_p1
+¿e = succ(true); // ERROR 2010 succ_p1
+// ----------------------------------------------------------------
+// 11. Funciones anidadas: la salida de una funcion es la entrada de otra
+// ----------------------------------------------------------------
+¿e = SQRT(SQRT(16)); // OK
+¿e = POW(SQRT(16), 2); // OK
+¿e = SQRT(STRLEN(@c)); // OK
+@c = concat(chr(65), chr(#Dx)); // OK
+@c = concat(chr(65), concat(@c, @d)); // OK
+@c = chr(inc(#Dx)); // OK
+¡f = str(STRLEN(@c), @c); // OK
+#Dx = STRLEN(concat(@c, @d)); // OK
+¿e = SQRT(16) + SQRT(25); // OK
+#Dx = STRLEN(@c) + STRLEN(@d); // OK
+¿e = SQRT(STRLEN(5)); // ERROR 2005 strlen_p1
+#Dx = STRLEN(chr(2.5)); // ERROR 2009 chr_p1
+¿e = SQRT(chr(65)); // ERROR 2002 sqrt_p1
+@c = concat(STRLEN(@c), @d); // ERROR 2005 concat_p1
+¿e = SQRT(copy(@c, @d)); // ERROR 2002 sqrt_p1
+¿e = POW(SQRT(@c), 2); // ERROR 2002 sqrt_p1
+// ----------------------------------------------------------------
+// 12. Ultima instruccion (sin punto y coma antes de la llave)
+// ----------------------------------------------------------------
+CLEAR // OK
+}

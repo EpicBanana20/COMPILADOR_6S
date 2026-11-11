@@ -239,6 +239,92 @@ public class LecturaMatriz {
         return tablasCompatibilidad.get(nombre);
     }
 
+    // ==================== MÉTODOS PARA SEMÁNTICA 3 (FUNCIONES PREDEFINIDAS) ====================
+
+    /** Regla de Semántica 3 de un parámetro (sqrt_p1) o de la salida de una función (sqrt). */
+    public static class ReglaSemantica3 {
+        public final int regla;
+        public final String nombre;                                   // sqrt_p1, sqrt...
+        public final List<String> tipos = new ArrayList<>();          // tipos aceptados / de salida (bin, dec, oct, hex, real, exp, cadena, bool, void)
+        public final List<String> soloId = new ArrayList<>();         // tipos que solo se aceptan como identificador
+        public boolean idCadena;                                      // solo un id de Cadena
+        public boolean id;                                            // también acepta identificadores
+
+        ReglaSemantica3(int regla, String nombre) {
+            this.regla = regla;
+            this.nombre = nombre;
+        }
+
+        public boolean esSalida() {
+            return regla >= 2011;
+        }
+    }
+
+    private static final String[] COLUMNAS_TIPOS_S3 = { "bin", "dec", "oct", "hex", "real", "exp", "cadena", "bool", "void" };
+
+    private Map<String, ReglaSemantica3> reglasSemantica3 = new LinkedHashMap<>();
+
+    /**
+     * Lee SEMANTICA3.csv: una fila por regla 2001-2018 con una columna por tipo ('*' = acepta, 'solo id' = solo identificador),
+     * IdCadena, Id y la lista (separada por espacios) de funciones/parámetros a los que aplica.
+     * @return true si se cargó correctamente
+     */
+    public boolean cargarSemantica3(String rutaArchivo) {
+        reglasSemantica3.clear();
+
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(rutaArchivo), StandardCharsets.UTF_8))) {
+            String linea;
+            boolean primeraLinea = true;
+            while ((linea = br.readLine()) != null) {
+                if (primeraLinea) {
+                    primeraLinea = false;
+                    continue;
+                }
+                if (linea.trim().isEmpty()) continue;
+
+                String[] v = linea.split(",", -1);
+                if (v.length < 13) continue;
+                int regla;
+                try {
+                    regla = Integer.parseInt(v[0].trim());
+                } catch (NumberFormatException e) {
+                    System.err.println("Error: regla de Semántica 3 no válida: " + linea);
+                    continue;
+                }
+                if (regla == 2001) continue; // CLEAR no tiene entradas; su fila de salida es la 2011
+
+                for (String nombre : v[12].trim().split("\\s+")) {
+                    if (nombre.isEmpty()) continue;
+                    ReglaSemantica3 r = new ReglaSemantica3(regla, nombre);
+                    for (int i = 0; i < COLUMNAS_TIPOS_S3.length; i++) {
+                        String celda = v[i + 1].trim().toLowerCase();
+                        if (celda.equals("*")) r.tipos.add(COLUMNAS_TIPOS_S3[i]);
+                        else if (celda.equals("solo id")) r.soloId.add(COLUMNAS_TIPOS_S3[i]);
+                    }
+                    r.idCadena = v[10].trim().equals("*");
+                    r.id = v[11].trim().equals("*");
+                    reglasSemantica3.put(nombre.toLowerCase(), r);
+                }
+            }
+            System.out.println("Reglas de Semántica 3 cargadas correctamente. Total: " + reglasSemantica3.size());
+            return true;
+
+        } catch (IOException e) {
+            System.err.println("Error al leer las reglas de Semántica 3: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** Regla de un parámetro (sqrt_p1) o de una salida (sqrt); null si no existe. */
+    public ReglaSemantica3 getReglaSemantica3(String nombre) {
+        return reglasSemantica3.get(nombre.toLowerCase());
+    }
+
+    /** Todas las reglas de Semántica 3 (parámetros y salidas), en el orden del CSV. */
+    public Map<String, ReglaSemantica3> getReglasSemantica3() {
+        return reglasSemantica3;
+    }
+
     // ==================== MÉTODOS PARA PRODUCCIONES GRAMATICALES ====================
 
     /**
